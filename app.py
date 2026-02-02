@@ -18,6 +18,17 @@ import socket
 from supabase import create_client, Client
 
 # --- KONFIGURASI ---
+# Force IPv4 to prevent IPv6 connection issues on Vercel
+try:
+    old_getaddrinfo = socket.getaddrinfo
+    def new_getaddrinfo(*args, **kwargs):
+        responses = old_getaddrinfo(*args, **kwargs)
+        return [response for response in responses if response[0] == socket.AF_INET]
+    socket.getaddrinfo = new_getaddrinfo
+    print("IPv4 Forced for socket connections.")
+except Exception as e:
+    print(f"Failed to force IPv4: {e}")
+
 # GANTI DENGAN TOKEN BOT ANDA
 API_TOKEN = '8556104756:AAGVZJyvrxV4P-yN486BH7K5SR_f8jRZDLw' 
 # URL Ngrok yang diberikan user (pastikan https)
@@ -614,9 +625,43 @@ def dashboard_reservasi_cmd(message):
         markup = types.InlineKeyboardMarkup()
         btn = types.InlineKeyboardButton("🗂️ Buka Dashboard Reservasi", url=url)
         markup.add(btn)
-        bot.send_message(message.chat.id, "🗂️ Dashboard Reservasi (Inquiry)\nKlik tombol di bawah untuk membuka:", reply_markup=markup)
+        bot.send_message(message.chat.id, "🗂️ *DASHBOARD RESERVASI (INQUIRY)*\nKlik tombol di bawah untuk melihat request reservasi:", parse_mode='Markdown', reply_markup=markup)
     except Exception as e:
         bot.send_message(message.chat.id, f"URL Dashboard: {url}")
+
+@bot.message_handler(commands=['cek_pembayaran'])
+def cek_pembayaran(message):
+    if message.chat.id not in STAFF_FO_IDS:
+        bot.send_message(message.chat.id, f"❌ Akses Ditolak. ID Anda: {message.chat.id} tidak terdaftar sebagai Staff FO.")
+        return
+        
+    dashboard_url = f"{NGROK_URL}/staff/dashboard"
+    
+    markup = types.InlineKeyboardMarkup()
+    btn = types.InlineKeyboardButton("🖥️ Buka Dashboard Staff", url=dashboard_url)
+    markup.add(btn)
+    
+    bot.send_message(message.chat.id, 
+                     "📊 *STAFF DASHBOARD (BOOKING)*\n\n"
+                     "Gunakan dashboard ini untuk:\n"
+                     "✅ Cek Status Pembayaran (Pending/Paid)\n"
+                     "❌ Membatalkan Booking\n"
+                     "📝 Melihat Detail Booking Tamu",
+                     parse_mode='Markdown', reply_markup=markup)
+
+@bot.message_handler(commands=['date_reservasi'])
+def bot_date_reservasi(message):
+    if message.chat.id not in STAFF_FO_IDS:
+        bot.send_message(message.chat.id, f"❌ Akses Ditolak. ID Anda: {message.chat.id} tidak terdaftar sebagai Staff FO.")
+        return
+        
+    calendar_url = f"{NGROK_URL}/date_reservasi"
+    
+    markup = types.InlineKeyboardMarkup()
+    btn = types.InlineKeyboardButton("📅 Tampilkan Kalender", url=calendar_url)
+    markup.add(btn)
+    
+    bot.send_message(message.chat.id, "🗓 *KALENDER RESERVASI*\nKlik tombol di bawah untuk melihat ketersediaan tanggal.", parse_mode='Markdown', reply_markup=markup)
 
 @bot.message_handler(commands=['cek_booking'])
 def cek_booking(message):
@@ -904,40 +949,7 @@ def cetak_laporan_reservasi(message):
         print(f"Error cetak laporan reservasi: {e}")
         bot.send_message(message.chat.id, f"❌ Gagal membuat laporan reservasi: {e}")
 
-@bot.message_handler(commands=['date_reservasi'])
-def bot_date_reservasi(message):
-    if message.chat.id not in STAFF_FO_IDS:
-        bot.send_message(message.chat.id, f"❌ Akses Ditolak. ID Anda: {message.chat.id} tidak terdaftar sebagai Staff FO.")
-        return
-        
-    calendar_url = f"{NGROK_URL}/date_reservasi"
-    
-    markup = types.InlineKeyboardMarkup()
-    btn = types.InlineKeyboardButton("📅 Tampilkan Calender", url=calendar_url)
-    markup.add(btn)
-    
-    bot.send_message(message.chat.id, "🗓 *CALENDER RESERVASI*\nKlik tombol di bawah untuk melihat ketersediaan tanggal.", parse_mode='Markdown', reply_markup=markup)
-
-@bot.message_handler(commands=['cek_pembayaran'])
-def cek_pembayaran(message):
-    print(f"DEBUG: /cek_pembayaran accessed by {message.chat.id}")
-    if message.chat.id not in STAFF_FO_IDS:
-        bot.send_message(message.chat.id, f"❌ Akses Ditolak. ID Anda: {message.chat.id} tidak terdaftar sebagai Staff FO.")
-        return
-        
-    dashboard_url = f"{NGROK_URL}/staff/dashboard"
-    
-    markup = types.InlineKeyboardMarkup()
-    btn = types.InlineKeyboardButton("🖥️ Buka Dashboard Staff", url=dashboard_url)
-    markup.add(btn)
-    
-    bot.send_message(message.chat.id, 
-                     "📊 *STAFF DASHBOARD*\n\n"
-                     "Gunakan dashboard ini untuk:\n"
-                     "✅ Cek Status Pembayaran (Pending/Paid)\n"
-                     "❌ Membatalkan Booking\n"
-                     "📝 Melihat Detail Booking Tamu",
-                     parse_mode='Markdown', reply_markup=markup)
+# (Moved to Staff Features Section)
 
 # Hapus handle_wa_qris lama karena sudah diganti endpoint redirect
 # (Sudah dihapus di kode baru ini)
@@ -1474,7 +1486,7 @@ def test_db_route():
 
 @app.route('/version')
 def version_route():
-    return "App Version: 2.0 (Supabase REST API - No IPv6 Issues)", 200
+    return "App Version: 2.1 (Fix Staff Commands & IPv4 Patch)", 200
 
 if __name__ == '__main__':
     # init_db() # Disabled for Supabase REST Migration
