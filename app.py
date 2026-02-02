@@ -616,10 +616,43 @@ def help_cmd(message):
 
 # --- FITUR STAFF FO (CEK BOOKING & QRIS) ---
 
-# --- FITUR STAFF FO (CEK BOOKING & QRIS) ---
+STAFF_COMMANDS = [
+    'dashboard_reservasi', 'dash_reservasi',
+    'cek_pembayaran',
+    'date_reservasi', 'calendar', 'kalender',
+    'cek_booking',
+    'cetak_lap_harian', 'cetak_laporan_harian',
+    'cetak_laporan_reservasi',
+    'sys_check'
+]
 
-@bot.message_handler(commands=['dashboard_reservasi', 'dash_reservasi'])
-def dashboard_reservasi_cmd(message):
+@bot.message_handler(commands=STAFF_COMMANDS)
+def staff_command_dispatcher(message):
+    print(f"DEBUG: Dispatcher received {message.text} from {message.chat.id}")
+    
+    if message.chat.id not in STAFF_FO_IDS:
+        bot.send_message(message.chat.id, f"❌ Akses Ditolak. ID Anda: {message.chat.id} tidak terdaftar sebagai Staff FO.")
+        return
+
+    # Normalize command
+    cmd = message.text.split()[0].lower().replace('/', '').split('@')[0]
+    
+    if cmd in ['dashboard_reservasi', 'dash_reservasi']:
+        logic_dashboard_reservasi(message)
+    elif cmd == 'cek_pembayaran':
+        logic_cek_pembayaran(message)
+    elif cmd in ['date_reservasi', 'calendar', 'kalender']:
+        logic_date_reservasi(message)
+    elif cmd == 'cek_booking':
+        logic_cek_booking(message)
+    elif cmd in ['cetak_lap_harian', 'cetak_laporan_harian']:
+        logic_cetak_lap_harian(message)
+    elif cmd == 'cetak_laporan_reservasi':
+        logic_cetak_laporan_reservasi(message)
+    elif cmd == 'sys_check':
+        bot.send_message(message.chat.id, "✅ System Online\nVersion: 2.3 (Unified Handler)\nDeployment: OK")
+
+def logic_dashboard_reservasi(message):
     print(f"DEBUG: /dashboard_reservasi accessed by {message.chat.id}")
     if message.chat.id not in STAFF_FO_IDS:
         bot.send_message(message.chat.id, f"❌ Akses Ditolak. ID Anda: {message.chat.id} tidak terdaftar sebagai Staff FO.")
@@ -634,8 +667,7 @@ def dashboard_reservasi_cmd(message):
     except Exception as e:
         bot.send_message(message.chat.id, f"URL Dashboard: {url}")
 
-@bot.message_handler(commands=['cek_pembayaran'])
-def cek_pembayaran(message):
+def logic_cek_pembayaran(message):
     print(f"DEBUG: /cek_pembayaran accessed by {message.chat.id}")
     if message.chat.id not in STAFF_FO_IDS:
         bot.send_message(message.chat.id, f"❌ Akses Ditolak. ID Anda: {message.chat.id} tidak terdaftar sebagai Staff FO.")
@@ -655,8 +687,7 @@ def cek_pembayaran(message):
                      "📝 Melihat Detail Booking Tamu",
                      parse_mode='Markdown', reply_markup=markup)
 
-@bot.message_handler(commands=['date_reservasi', 'calendar', 'kalender'])
-def bot_date_reservasi(message):
+def logic_date_reservasi(message):
     print(f"DEBUG: /date_reservasi accessed by {message.chat.id}")
     if message.chat.id not in STAFF_FO_IDS:
         bot.send_message(message.chat.id, f"❌ Akses Ditolak. ID Anda: {message.chat.id} tidak terdaftar sebagai Staff FO.")
@@ -670,8 +701,7 @@ def bot_date_reservasi(message):
     
     bot.send_message(message.chat.id, "🗓 *KALENDER RESERVASI*\nKlik tombol di bawah untuk melihat ketersediaan tanggal.", parse_mode='Markdown', reply_markup=markup)
 
-@bot.message_handler(commands=['cek_booking'])
-def cek_booking(message):
+def logic_cek_booking(message):
     print(f"DEBUG: /cek_booking accessed by {message.chat.id}")
     
     # Validasi: Hanya Staff FO yang boleh akses
@@ -751,8 +781,7 @@ class PDF(FPDF):
         self.set_font('Arial', 'I', 8)
         self.cell(0, 10, f'Laporan dibuat oleh Sentra Guest OS | SGO V1.0 - Halaman {self.page_no()}', 0, 0, 'C')
 
-@bot.message_handler(commands=['cetak_lap_harian', 'cetak_laporan_harian'])
-def cetak_lap_harian(message):
+def logic_cetak_lap_harian(message):
     # Validasi: Hanya Staff FO
     if message.chat.id not in STAFF_FO_IDS:
         bot.send_message(message.chat.id, f"❌ Akses Ditolak. ID Anda: {message.chat.id} tidak terdaftar sebagai Staff FO.")
@@ -858,8 +887,7 @@ def cetak_lap_harian(message):
         print(f"Error cetak laporan: {e}")
         bot.send_message(message.chat.id, f"❌ Gagal membuat laporan: {e}")
 
-@bot.message_handler(commands=['cetak_laporan_reservasi'])
-def cetak_laporan_reservasi(message):
+def logic_cetak_laporan_reservasi(message):
     if message.chat.id not in STAFF_FO_IDS:
         bot.send_message(message.chat.id, f"❌ Akses Ditolak. ID Anda: {message.chat.id} tidak terdaftar sebagai Staff FO.")
         return
@@ -1490,7 +1518,7 @@ def test_db_route():
 
 @app.route('/version')
 def version_route():
-    return "App Version: 2.3 (Optimized Bot Commands for Vercel)", 200
+    return "App Version: 2.4 (Unified Command Handler)", 200
 
 if __name__ == '__main__':
     # init_db() # Disabled for Supabase REST Migration
