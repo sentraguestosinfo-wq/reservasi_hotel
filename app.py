@@ -61,20 +61,6 @@ def format_guest_name(name):
     except:
         return f"Mr/Mrs {name}"
 
-# Placeholder for backward compatibility during refactoring
-def get_db_connection():
-    print("WARNING: get_db_connection is deprecated. Use 'supabase' client directly.")
-    return None
-
-def init_db():
-    # Supabase setup is done via Dashboard/SQL Editor, not here.
-    pass
-    
-    # No explicit migration needed for new DB setup as we define full schema above.
-    # If we need to alter existing tables later, we should check column existence.
-
-def migrate_categories():
-    pass # Not needed for fresh Supabase DB
 
 @app.route('/')
 def index():
@@ -117,23 +103,20 @@ def wa_redirect():
             return "Invalid request: Missing resi", 400
             
         # 1. Ambil data booking
-        conn = get_db_connection()
-        if not conn:
-            return "Database Error", 500
         try:
-            c = conn.cursor()
-            c.execute("SELECT phone, nama FROM bookings WHERE resi = %s", (resi,))
-            result = c.fetchone()
-            if not result:
+            response = supabase.table('bookings').select('phone, nama').eq('resi', resi).execute()
+            if not response.data:
                 return "Booking not found", 404
             
-            phone_db, nama_db = result
+            result = response.data[0]
+            phone_db = result['phone']
+            nama_db = result['nama']
             
             # Update status QRIS
-            c.execute("UPDATE bookings SET qris_status = 'sent' WHERE resi = %s", (resi,))
-            conn.commit()
-        finally:
-            conn.close()
+            supabase.table('bookings').update({'qris_status': 'sent'}).eq('resi', resi).execute()
+            
+        except Exception as e:
+             return f"Database Error: {e}", 500
             
         # 2. Update Telegram Message (Hapus tombol Kirim QRIS & Kirim Konfirmasi)
         if staff_id and msg_id:
@@ -290,24 +273,30 @@ def submit_reservasi():
         
         # Simpan ke DB dengan status 'reservation' (Bukan 'pending')
         # Category = 'reservation'
-        conn = get_db_connection()
-        if not conn:
-            return jsonify({"status": "error", "message": "Database error"}), 500
-        
         try:
-            c = conn.cursor()
-            
-            # Insert
-            c.execute("""INSERT INTO bookings 
-                            (resi, chat_id, nama, tipe, tgl, jml_kamar, orang, harga, qris_status, phone, 
-                            email, via, lat, lng, created_at, status, extended, category) 
-                            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s, %s,%s,%s,%s,%s, 'reserved', 0, 'reservation')""", 
-                        (resi, chat_id, data_req['nama'], data_req['tipe'], data_req['tgl'], 
-                        data_req['jml_kamar'], data_req['orang'], data_req['total_harga'], 'pending', phone,
-                        email, 'web', 0, 0, current_time))
-            conn.commit()
-        finally:
-            conn.close()
+            data_insert = {
+                'resi': resi,
+                'chat_id': chat_id,
+                'nama': data_req['nama'],
+                'tipe': data_req['tipe'],
+                'tgl': data_req['tgl'],
+                'jml_kamar': data_req['jml_kamar'],
+                'orang': data_req['orang'],
+                'harga': str(data_req['total_harga']),
+                'qris_status': 'pending',
+                'phone': phone,
+                'email': email,
+                'via': 'web',
+                'lat': 0,
+                'lng': 0,
+                'created_at': current_time.isoformat(),
+                'status': 'reserved',
+                'extended': 0,
+                'category': 'reservation'
+            }
+            supabase.table('bookings').insert(data_insert).execute()
+        except Exception as e:
+            return jsonify({"status": "error", "message": f"Database error: {e}"}), 500
 
         # Email Konfirmasi Reservasi
         try:
@@ -432,46 +421,55 @@ def submit_booking():
         if via == 'web' and (not email or email == '-'):
             return jsonify({"status": "error", "message": "Email wajib diisi untuk booking via Web"}), 400
 
-        conn = get_db_connection()
-        if not conn:
-            return jsonify({"status": "error", "message": "Database error"}), 500
         try:
-            c = conn.cursor()
-            
             # --- ANTI-DUPLICATE CHECK (10 Menit) ---
             # Cek apakah ada booking dengan Nama & Tanggal & HP yang sama dalam 10 menit terakhir
-            c.execute("SELECT resi FROM bookings WHERE nama = %s AND tgl = %s AND phone = %s", 
-                      (data_req['nama'], data_req['tgl'], phone))
-            existing = c.fetchall()
+            res_dup = supabase.table('bookings').select('resi').eq('nama', data_req['nama']).eq('tgl', data_req['tgl']).eq('phone', phone).execute()
+            existing = res_dup.data
             
             current_time = datetime.now()
             for row in existing:
                 try:
                     # Parse waktu dari Resi: NEXA-YYMMDDHHMM
                     # Ambil bagian angka setelah 'NEXA-'
-                    ts_str = row[0].split('-')[1]
+                    ts_str = row['resi'].split('-')[1]
                     booking_time = datetime.strptime(ts_str, '%y%m%d%H%M')
                     
                     # Jika selisih waktu kurang dari 10 menit (600 detik)
                     if (current_time - booking_time).total_seconds() < 600:
-                        print(f"Duplicate booking prevented: {row[0]}")
+                        print(f"Duplicate booking prevented: {row['resi']}")
                         # Return sukses dengan resi lama (Idempotency)
-                        return jsonify({"status": "success", "resi": row[0]})
+                        return jsonify({"status": "success", "resi": row['resi']})
                 except Exception as e:
-                    print(f"Error parsing resi time: {e}")
-                    continue
+                    print(f"Error parsing resi for duplicate check: {e}")
+                    # Continue checking others
+
+            # --- INSERT NEW BOOKING ---
+            data_insert = {
+                'resi': resi,
+                'chat_id': chat_id,
+                'nama': data_req['nama'],
+                'tipe': data_req['tipe'],
+                'tgl': data_req['tgl'],
+                'jml_kamar': data_req['jml_kamar'],
+                'orang': data_req['orang'],
+                'harga': str(data_req['total_harga']),
+                'qris_status': 'pending',
+                'phone': phone,
+                'email': email,
+                'via': via,
+                'lat': lat,
+                'lng': lng,
+                'created_at': current_time.isoformat(),
+                'status': 'pending',
+                'extended': 0,
+                'category': 'booking'
+            }
+            supabase.table('bookings').insert(data_insert).execute()
             
-            # Insert with new fields
-            c.execute("""INSERT INTO bookings 
-                         (resi, chat_id, nama, tipe, tgl, jml_kamar, orang, harga, qris_status, phone, 
-                          email, via, lat, lng, created_at, status, extended) 
-                         VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s, %s,%s,%s,%s,%s, 'pending', 0)""", 
-                      (resi, chat_id, data_req['nama'], data_req['tipe'], data_req['tgl'], 
-                       data_req['jml_kamar'], data_req['orang'], data_req['total_harga'], 'pending', phone,
-                       email, via, lat, lng, current_time))
-            conn.commit()
-        finally:
-            conn.close()
+        except Exception as e:
+            return jsonify({"status": "error", "message": f"Database error: {e}"}), 500
+
 
         # Send Email Confirmation if email exists
         if email and email != '-':
@@ -628,23 +626,14 @@ def cek_booking(message):
         print(f"DEBUG: Access denied for {message.chat.id}")
         return
 
-    conn = get_db_connection()
-    if not conn:
-        bot.send_message(message.chat.id, "❌ Database Connection Error")
-        return
-        
     try:
-        c = conn.cursor()
-        # Ambil 5 booking terakhir (kategori booking saja)
-        c.execute("SELECT resi, nama, tipe, harga, chat_id, qris_status, phone FROM bookings WHERE category = 'booking' ORDER BY created_at DESC LIMIT 5")
-        bookings = c.fetchall()
+        response = supabase.table('bookings').select('resi, nama, tipe, harga, chat_id, qris_status, phone').eq('category', 'booking').order('created_at', desc=True).limit(5).execute()
+        bookings = response.data
         print(f"DEBUG: Found {len(bookings)} bookings")
     except Exception as e:
         print(f"DEBUG: Database error: {e}")
         bot.send_message(message.chat.id, f"❌ Database Error: {e}")
         return
-    finally:
-        conn.close()
 
     if not bookings:
         bot.send_message(message.chat.id, "📭 Belum ada data booking terbaru.")
@@ -653,7 +642,13 @@ def cek_booking(message):
     bot.send_message(message.chat.id, "📋 *DAFTAR 5 BOOKING TERBARU*\nSilahkan pilih tamu untuk dikirimkan QRIS Pembayaran:", parse_mode='Markdown')
 
     for b in bookings:
-        resi, nama, tipe, harga, guest_chat_id, qris_status, phone = b
+        resi = b['resi']
+        nama = b['nama']
+        tipe = b['tipe']
+        harga = b['harga']
+        guest_chat_id = b['chat_id']
+        qris_status = b['qris_status']
+        phone = b['phone']
         try:
             # Tentukan status icon
             status_icon = "✅ SUDAH DIKIRIM" if qris_status == 'sent' else "❌ BELUM DIKIRIM"
@@ -725,19 +720,12 @@ def cetak_lap_harian(message):
         today_str = datetime.now().strftime('%y%m%d') # Format YYMMDD sesuai Resi NEXA-YYMMDD...
         date_display = datetime.now().strftime('%d %B %Y')
         
-        conn = get_db_connection()
-        if not conn:
+        try:
+            response = supabase.table('bookings').select('resi, nama, phone, tgl, tipe, orang, via').like('resi', f'NEXA-{today_str}%').execute()
+            bookings = response.data
+        except Exception as e:
              bot.send_message(message.chat.id, "❌ Database Error")
              return
-             
-        try:
-            c = conn.cursor()
-            # Filter resi yang diawali NEXA-YYMMDD
-            # Postgres LIKE % is correct, but parameter syntax
-            c.execute("SELECT resi, nama, phone, tgl, tipe, orang, via FROM bookings WHERE resi LIKE %s", (f'NEXA-{today_str}%',))
-            bookings = c.fetchall()
-        finally:
-            conn.close()
         
         if not bookings:
             bot.send_message(message.chat.id, "📭 Belum ada data booking untuk hari ini.")
@@ -784,7 +772,13 @@ def cetak_lap_harian(message):
         
         for b in bookings:
             # Unpack sesuai query (resi, nama, phone, tgl, tipe, orang, via)
-            resi, nama, phone, tgl, tipe, orang, via = b
+            resi = b['resi']
+            nama = b['nama']
+            phone = b['phone']
+            tgl = b['tgl']
+            tipe = b['tipe']
+            orang = b['orang']
+            via = b['via']
             
             # Clean data if necessary
             # Nama (Truncate if too long)
@@ -828,17 +822,12 @@ def cetak_laporan_reservasi(message):
         today_str = datetime.now().strftime('%y%m%d')
         date_display = datetime.now().strftime('%d %B %Y')
         
-        conn = get_db_connection()
-        if not conn:
+        try:
+            response = supabase.table('bookings').select('resi, nama, tgl, tipe, jml_kamar, orang, status, phone').eq('category', 'reservation').like('resi', f'RSV-{today_str}%').execute()
+            rows = response.data
+        except Exception as e:
             bot.send_message(message.chat.id, "❌ Database Error")
             return
-            
-        try:
-            c = conn.cursor()
-            c.execute("SELECT resi, nama, tgl, tipe, jml_kamar, orang, status, phone FROM bookings WHERE category = 'reservation' AND resi LIKE %s", (f'RSV-{today_str}%',))
-            rows = c.fetchall()
-        finally:
-            conn.close()
         
         if not rows:
             bot.send_message(message.chat.id, "📭 Belum ada data reservasi untuk hari ini.")
@@ -868,7 +857,14 @@ def cetak_laporan_reservasi(message):
         pdf.set_font("Arial", '', 9)
         pdf.set_fill_color(255, 255, 255)
         for r in rows:
-            resi, nama, tgl, tipe, jml_kamar, orang, status, phone = r
+            resi = r['resi']
+            nama = r['nama']
+            tgl = r['tgl']
+            tipe = r['tipe']
+            jml_kamar = r['jml_kamar']
+            orang = r['orang']
+            status = r['status']
+            phone = r['phone']
             nama_disp = (nama[:25] + '..') if len(nama) > 25 else nama
             detail = ""
             if tipe == 'Kamar':
@@ -959,15 +955,9 @@ def handle_qris(call):
 
         guest_name = None
         try:
-            conn = get_db_connection()
-            if conn:
-                try:
-                    c = conn.cursor()
-                    c.execute("SELECT nama FROM bookings WHERE resi = %s", (resi,))
-                    row = c.fetchone()
-                    guest_name = row[0] if row else None
-                finally:
-                    conn.close()
+            response = supabase.table('bookings').select('nama').eq('resi', resi).execute()
+            if response.data:
+                guest_name = response.data[0]['nama']
         except Exception as _:
             guest_name = None
 
@@ -993,16 +983,10 @@ def handle_qris(call):
             bot.send_message(call.message.chat.id, f"✅ QRIS berhasil dikirim ke tamu dengan Resi {resi}.")
             
             # Update status di database
-            conn = get_db_connection()
-            if conn:
-                try:
-                    c = conn.cursor()
-                    c.execute("UPDATE bookings SET qris_status = 'sent' WHERE resi = %s", (resi,))
-                    conn.commit()
-                except Exception as db_err:
-                    print(f"Gagal update status QRIS: {db_err}")
-                finally:
-                    conn.close()
+            try:
+                supabase.table('bookings').update({'qris_status': 'sent'}).eq('resi', resi).execute()
+            except Exception as db_err:
+                print(f"Gagal update status QRIS: {db_err}")
 
             # Update tombol/pesan di chat Staff agar langsung berubah jadi 'Terkirim'
             try:
@@ -1060,23 +1044,22 @@ def handle_qris_email(call):
         guest_chat_id = parts[3]
         
         # Ambil data booking dari DB untuk dapat email
-        conn = get_db_connection()
-        if not conn:
-            bot.answer_callback_query(call.id, "Database Error ❌")
-            return
-            
         try:
-            c = conn.cursor()
-            c.execute("SELECT email, nama, harga, created_at, qris_status FROM bookings WHERE resi = %s", (resi,))
-            row = c.fetchone()
-        finally:
-            conn.close()
-        
-        if not row:
-            bot.answer_callback_query(call.id, "Data booking tidak ditemukan ❌")
+            response = supabase.table('bookings').select('email, nama, harga, created_at, qris_status').eq('resi', resi).execute()
+            if not response.data:
+                bot.answer_callback_query(call.id, "Data booking tidak ditemukan ❌")
+                return
+            row_data = response.data[0]
+        except Exception as e:
+            bot.answer_callback_query(call.id, "Database Error ❌")
+            print(f"DB Error: {e}")
             return
             
-        email, nama, total_harga, created_at_str, qris_status = row
+        email = row_data['email']
+        nama = row_data['nama']
+        total_harga = row_data['harga']
+        created_at_str = row_data['created_at']
+        qris_status = row_data['qris_status']
         
         # Jika sudah terkirim sebelumnya, jangan kirim ulang
         if qris_status == 'sent':
@@ -1128,14 +1111,10 @@ def handle_qris_email(call):
             send_qris_email(email, booking_data)
             
             # Update Status di DB
-            conn = get_db_connection()
-            if conn:
-                try:
-                    c = conn.cursor()
-                    c.execute("UPDATE bookings SET qris_status = 'sent' WHERE resi = %s", (resi,))
-                    conn.commit()
-                finally:
-                    conn.close()
+            try:
+                supabase.table('bookings').update({'qris_status': 'sent'}).eq('resi', resi).execute()
+            except Exception as e:
+                print(f"Error updating qris status: {e}")
             
             bot.answer_callback_query(call.id, "Email QRIS Terkirim! ✅")
             bot.send_message(call.message.chat.id, f"✅ Email QRIS berhasil dikirim ke {email} (Resi: {resi}).")
@@ -1187,74 +1166,76 @@ def check_expired_bookings():
     print("Background Task Started: Auto-Cancel & Geolocation Check")
     while True:
         try:
-            conn = get_db_connection()
-            if conn:
+            # 1. Cari booking 'pending' yang sudah > 2 jam
+            time_threshold = (datetime.now() - timedelta(hours=2)).isoformat()
+            
+            response = supabase.table('bookings').select('resi, nama, chat_id, lat, lng, created_at, extended').eq('status', 'pending').lt('created_at', time_threshold).execute()
+            rows = response.data
+            
+            for row in rows:
+                resi = row['resi']
+                nama = row['nama']
+                chat_id = row['chat_id']
+                lat = row['lat']
+                lng = row['lng']
+                created_at_str = row['created_at']
+                extended = row['extended']
+        
+                # Parse created_at
                 try:
-                    c = conn.cursor()
-                    
-                    # 1. Cari booking 'pending' yang sudah > 2 jam
-                    # PostgreSQL interval syntax
-                    time_threshold = datetime.now() - timedelta(hours=2)
-                    
-                    c.execute("SELECT resi, nama, chat_id, lat, lng, created_at, extended FROM bookings WHERE status = 'pending' AND created_at < %s", (time_threshold,))
-                    rows = c.fetchall()
-                    
-                    for row in rows:
-                        resi, nama, chat_id, lat, lng, created_at, extended = row
+                    if '.' in created_at_str:
+                        created_at = datetime.strptime(created_at_str.split('.')[0], "%Y-%m-%dT%H:%M:%S")
+                    else:
+                        created_at = datetime.fromisoformat(created_at_str)
+                except:
+                    created_at = datetime.now() # Fallback
+
+                # Cek Geolocation untuk Extend (Jika belum pernah extended)
+                should_extend = False
                 
+                # Titik Koordinat Hotel Mercure Bandung Nexa Supratman (Hardcoded/From data.py)
+                HOTEL_LAT = -6.9088
+                HOTEL_LNG = 107.6285
+                
+                if not extended and lat and lng:
+                    # Cek jarak
+                    dist = calculate_distance(lat, lng, HOTEL_LAT, HOTEL_LNG)
+                    print(f"DEBUG: Booking {resi} expired. Dist: {dist:.2f} km")
+                    
+                    if dist < 10: # Radius aman 10 km
+                        should_extend = True
+                
+                if should_extend:
+                    # EXTEND 30 Menit (Update created_at + 30 menit)
+                    new_created_at = created_at + timedelta(minutes=30)
+                    supabase.table('bookings').update({'created_at': new_created_at.isoformat(), 'extended': 1}).eq('resi', resi).execute()
+                    
+                    msg_ext = f"⏳ Booking {resi} ({nama}) diperpanjang 30 menit otomatis karena posisi tamu dekat ({dist:.1f} km)."
+                    print(msg_ext)
+                    
+                    # Notif FO
+                    for sid in STAFF_FO_IDS:
+                        try:
+                            bot.send_message(sid, msg_ext)
+                        except: pass
                         
-                        # Cek Geolocation untuk Extend (Jika belum pernah extended)
-                        should_extend = False
+                else:
+                    # CANCEL
+                    supabase.table('bookings').update({'status': 'cancelled'}).eq('resi', resi).execute()
+                    
+                    print(f"Booking {resi} ({nama}) dicancel otomatis (Expired > 2 jam).")
+                    
+                    # Notif Tamu
+                    if chat_id != 'unknown':
+                        try:
+                            bot.send_message(chat_id, f"⚠️ *BOOKING EXPIRED*\nBooking Anda {resi} telah dibatalkan otomatis karena melewati batas waktu hold 2 jam.", parse_mode='Markdown')
+                        except: pass
                         
-                        # Titik Koordinat Hotel Mercure Bandung Nexa Supratman (Hardcoded/From data.py)
-                        # Lat: -6.9088, Lng: 107.6285
-                        HOTEL_LAT = -6.9088
-                        HOTEL_LNG = 107.6285
-                        
-                        if not extended and lat and lng:
-                            # Cek jarak
-                            dist = calculate_distance(lat, lng, HOTEL_LAT, HOTEL_LNG)
-                            print(f"DEBUG: Booking {resi} expired. Dist: {dist:.2f} km")
-                            
-                            if dist < 10: # Radius aman 10 km
-                                should_extend = True
-                        
-                        if should_extend:
-                            # EXTEND 30 Menit (Update created_at + 30 menit)
-                            new_created_at = created_at + timedelta(minutes=30)
-                            c.execute("UPDATE bookings SET created_at = %s, extended = 1 WHERE resi = %s", (new_created_at, resi))
-                            conn.commit()
-                            
-                            msg_ext = f"⏳ Booking {resi} ({nama}) diperpanjang 30 menit otomatis karena posisi tamu dekat ({dist:.1f} km)."
-                            print(msg_ext)
-                            
-                            # Notif FO
-                            for sid in STAFF_FO_IDS:
-                                try:
-                                    bot.send_message(sid, msg_ext)
-                                except: pass
-                                
-                        else:
-                            # CANCEL
-                            c.execute("UPDATE bookings SET status = 'cancelled' WHERE resi = %s", (resi,))
-                            conn.commit()
-                            
-                            print(f"Booking {resi} ({nama}) dicancel otomatis (Expired > 2 jam).")
-                            
-                            # Notif Tamu
-                            if chat_id != 'unknown':
-                                try:
-                                    bot.send_message(chat_id, f"⚠️ *BOOKING EXPIRED*\nBooking Anda {resi} telah dibatalkan otomatis karena melewati batas waktu hold 2 jam.", parse_mode='Markdown')
-                                except: pass
-                                
-                            # Notif FO
-                            for sid in STAFF_FO_IDS:
-                                try:
-                                    bot.send_message(sid, f"❌ Booking {resi} ({nama}) otomatis DIBATALKAN (Expired 2 Jam).")
-                                except: pass
-                                
-                finally:
-                    conn.close()
+                    # Notif FO
+                    for sid in STAFF_FO_IDS:
+                        try:
+                            bot.send_message(sid, f"❌ Booking {resi} ({nama}) otomatis DIBATALKAN (Expired 2 Jam).")
+                        except: pass
             
         except Exception as e:
             print(f"Error background task: {e}")
@@ -1275,68 +1256,50 @@ import traceback
 def api_bookings():
     print("API Bookings Request Received - NEW VERSION CHECK")
     try:
-        conn = get_db_connection()
-        if not conn:
-            return jsonify({"error": "Database connection error"}), 500
-        
-        try:
-            c = conn.cursor()
-            # Tambahkan kolom created_at di query
-            c.execute("SELECT resi, nama, tipe, tgl, jml_kamar, harga, status, email, via, created_at, orang FROM bookings WHERE category = 'booking' ORDER BY created_at DESC LIMIT 50")
-            rows = c.fetchall()
-        finally:
-            conn.close()
+        response = supabase.table('bookings').select('resi, nama, tipe, tgl, jml_kamar, harga, status, email, via, created_at, orang').eq('category', 'booking').order('created_at', desc=True).limit(50).execute()
+        rows = response.data
         
         data = []
         for r in rows:
             # Parse jam booking dari created_at
             jam_booking = '-'
+            created_at_val = r.get('created_at')
             try:
-                # r[9] is created_at, which is likely a datetime object in Psycopg2
-                if r[9]:
-                    if isinstance(r[9], datetime):
-                        jam_booking = r[9].strftime('%H:%M')
+                if created_at_val:
+                    if '.' in created_at_val:
+                         dt = datetime.strptime(created_at_val.split('.')[0], '%Y-%m-%dT%H:%M:%S')
                     else:
-                        # Fallback for string
-                        dt = datetime.strptime(str(r[9]), '%Y-%m-%d %H:%M:%S.%f')
-                        jam_booking = dt.strftime('%H:%M')
-            except:
-                try:
-                    # Fallback format check
-                    dt = datetime.strptime(str(r[9]), '%Y-%m-%d %H:%M:%S')
+                         dt = datetime.fromisoformat(created_at_val)
                     jam_booking = dt.strftime('%H:%M')
-                except: pass
+            except:
+                pass
 
-            # Parse Harga safely (remove dots)
+            # Parse Harga safely
             harga_str = "0"
+            raw_harga = str(r.get('harga', '0'))
             try:
-                if r[5]:
-                    raw_harga = str(r[5])
-                    # Remove non-numeric characters except comma/dot
-                    import re
-                    # Keep only digits
-                    clean_digits = re.sub(r'[^\d]', '', raw_harga)
-                    if clean_digits:
-                        val = float(clean_digits)
-                        harga_str = "{:,.0f}".format(val)
-                    else:
-                         harga_str = raw_harga
-            except Exception as e_inner:
-                print(f"Error parsing harga '{r[5]}': {e_inner}")
-                harga_str = str(r[5])
+                import re
+                clean_digits = re.sub(r'[^\d]', '', raw_harga)
+                if clean_digits:
+                    val = float(clean_digits)
+                    harga_str = "{:,.0f}".format(val)
+                else:
+                    harga_str = raw_harga
+            except:
+                harga_str = raw_harga
 
             data.append({
-                "resi": r[0],
-                "nama": r[1],
-                "tipe": r[2],
-                "tgl": r[3],
-                "jml_kamar": r[4],
+                "resi": r['resi'],
+                "nama": r['nama'],
+                "tipe": r['tipe'],
+                "tgl": r['tgl'],
+                "jml_kamar": r['jml_kamar'],
                 "harga": harga_str,
-                "status": r[6],
-                "email": r[7],
-                "via": r[8],
+                "status": r['status'],
+                "email": r['email'],
+                "via": r['via'],
                 "jam_booking": jam_booking,
-                "orang": r[10]
+                "orang": r['orang']
             })
         return jsonify(data)
     except Exception as e:
@@ -1351,63 +1314,48 @@ def staff_dashboard_reservasi():
 @app.route('/staff/api/reservasi')
 def api_reservasi():
     try:
-        conn = get_db_connection()
-        if not conn:
-            return jsonify({"error": "Database connection error"}), 500
-            
-        try:
-            c = conn.cursor()
-            # Perbaiki query:
-            # 1. Hapus LIMIT 50 sementara untuk memastikan semua data muncul
-            # 2. Pastikan filter category benar
-            c.execute("SELECT resi, nama, tipe, tgl, jml_kamar, harga, status, email, via, created_at, orang FROM bookings WHERE category = 'reservation' ORDER BY created_at DESC")
-            rows = c.fetchall()
-        finally:
-            conn.close()
+        response = supabase.table('bookings').select('resi, nama, tipe, tgl, jml_kamar, harga, status, email, via, created_at, orang').eq('category', 'reservation').order('created_at', desc=True).execute()
+        rows = response.data
         
         data = []
         for r in rows:
             jam_booking = '-'
+            created_at_val = r.get('created_at')
             try:
-                if r[9]:
-                    if isinstance(r[9], datetime):
-                        jam_booking = r[9].strftime('%H:%M')
+                if created_at_val:
+                    if '.' in created_at_val:
+                         dt = datetime.strptime(created_at_val.split('.')[0], '%Y-%m-%dT%H:%M:%S')
                     else:
-                        dt = datetime.strptime(str(r[9]), '%Y-%m-%d %H:%M:%S.%f')
-                        jam_booking = dt.strftime('%H:%M')
-            except:
-                try:
-                    dt = datetime.strptime(str(r[9]), '%Y-%m-%d %H:%M:%S')
+                         dt = datetime.fromisoformat(created_at_val)
                     jam_booking = dt.strftime('%H:%M')
-                except: pass
+            except:
+                pass
             
             harga_str = "0"
+            raw_harga = str(r.get('harga', '0'))
             try:
-                if r[5]:
-                    raw_harga = str(r[5])
-                    import re
-                    clean_digits = re.sub(r'[^\d]', '', raw_harga)
-                    if clean_digits:
-                        val = float(clean_digits)
-                        harga_str = "{:,.0f}".format(val)
-                    else:
-                        harga_str = raw_harga
-            except Exception as e_inner:
-                print(f"Error parsing harga '{r[5]}': {e_inner}")
-                harga_str = str(r[5])
+                import re
+                clean_digits = re.sub(r'[^\d]', '', raw_harga)
+                if clean_digits:
+                    val = float(clean_digits)
+                    harga_str = "{:,.0f}".format(val)
+                else:
+                    harga_str = raw_harga
+            except:
+                harga_str = raw_harga
             
             data.append({
-                "resi": r[0],
-                "nama": r[1],
-                "tipe": r[2],
-                "tgl": r[3],
-                "jml_kamar": r[4],
+                "resi": r['resi'],
+                "nama": r['nama'],
+                "tipe": r['tipe'],
+                "tgl": r['tgl'],
+                "jml_kamar": r['jml_kamar'],
                 "harga": harga_str,
-                "status": r[6],
-                "email": r[7],
-                "via": r[8],
+                "status": r['status'],
+                "email": r['email'],
+                "via": r['via'],
                 "jam_booking": jam_booking,
-                "orang": r[10]
+                "orang": r['orang']
             })
         return jsonify(data)
     except Exception as e:
@@ -1435,23 +1383,19 @@ def api_calendar_events():
         month_str = str(month).zfill(2)
         search_pattern = f"{year}-{month_str}%"
         
-        conn = get_db_connection()
-        if not conn:
-            return jsonify([]), 500
-        
         try:
-            c = conn.cursor()
-            c.execute("SELECT tgl, tipe, nama FROM bookings WHERE category = 'reservation' AND tgl LIKE %s", (search_pattern,))
-            rows = c.fetchall()
-        finally:
-            conn.close()
+            response = supabase.table('bookings').select('tgl, tipe, nama').eq('category', 'reservation').like('tgl', search_pattern).execute()
+            rows = response.data
+        except Exception as e:
+            print(f"Error calendar events db: {e}")
+            return jsonify([]), 500
         
         events = []
         for r in rows:
             events.append({
-                "tgl": r[0],
-                "tipe": r[1],
-                "nama": r[2]
+                "tgl": r['tgl'],
+                "tipe": r['tipe'],
+                "nama": r['nama']
             })
             
         return jsonify(events)
@@ -1469,16 +1413,10 @@ def api_update_status():
         if not resi or not new_status:
             return jsonify({"status": "error", "message": "Missing data"}), 400
             
-        conn = get_db_connection()
-        if not conn:
-             return jsonify({"status": "error", "message": "Database connection error"}), 500
-        
         try:
-            c = conn.cursor()
-            c.execute("UPDATE bookings SET status = %s WHERE resi = %s", (new_status, resi))
-            conn.commit()
-        finally:
-            conn.close()
+            supabase.table('bookings').update({'status': new_status}).eq('resi', resi).execute()
+        except Exception as e:
+             return jsonify({"status": "error", "message": f"Database error: {e}"}), 500
         
         # Optional: Notify Staff FO on Telegram about status change
         msg = f"📝 Status Booking {resi} diubah menjadi {new_status.upper()} via Dashboard."
