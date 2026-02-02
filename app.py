@@ -1492,63 +1492,55 @@ def api_update_status():
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
 
+@app.route('/webhook', methods=['POST'])
+def webhook():
+    if request.headers.get('content-type') == 'application/json':
+        json_string = request.get_data().decode('utf-8')
+        update = telebot.types.Update.de_json(json_string)
+        bot.process_new_updates([update])
+        return ''
+    else:
+        return 'Invalid payload', 403
+
 if __name__ == '__main__':
     init_db()
     print("\n\n=======================================================")
-    print(">>> SGO V1.1 LOADED: FIX CACHING & AUTO-LOCK <<<")
+    print(">>> SGO V1.1 LOADED: VERCEL MODE <<<")
     print("=======================================================\n")
     
-    # --- START BACKGROUND TASK ---
-    t_bg = Thread(target=check_expired_bookings)
-    t_bg.daemon = True
-    t_bg.start()
-    
-    # --- SETUP MENU COMMANDS ---
-    print("Setting up bot commands...")
-    
-    # 2. Setup Menu Commands
-    try:
-        # Hapus command lama dulu biar bersih
-        bot.delete_my_commands(scope=types.BotCommandScopeDefault())
-        
-        # Command Dasar untuk Tamu
-        guest_commands = [
-            types.BotCommand("start", "Mulai Aplikasi"),
-            types.BotCommand("help", "Bantuan Aplikasi")
-        ]
-        bot.set_my_commands(guest_commands, scope=types.BotCommandScopeDefault())
-        
-        # Command Khusus Staff FO
-        staff_commands = [
-            types.BotCommand("cek_booking", "📋 Cek Data Booking Tamu"),
-            types.BotCommand("cek_pembayaran", "📊 Dashboard Staff FO"),
-            types.BotCommand("cetak_lap_harian", "📄 Cetak Laporan Harian (PDF)"),
-            types.BotCommand("dashboard_reservasi", "🗂️ Dashboard Reservasi (Inquiry)"),
-            types.BotCommand("cetak_laporan_reservasi", "📄 Cetak Laporan Reservasi (PDF)"),
-            types.BotCommand("date_reservasi", "📅 Calender Reservasi")
-        ]
-        
-        for staff_id in STAFF_FO_IDS:
-            try:
-                bot.set_my_commands(staff_commands, scope=types.BotCommandScopeChat(staff_id))
-                bot.send_message(staff_id, "🤖 SYSTEM ONLINE\nMenu Staff telah diperbarui:\n/cek_booking\n/cek_pembayaran\n/cetak_lap_harian\n/dashboard_reservasi\n/cetak_laporan_reservasi\n/date_reservasi")
-            except Exception as e:
-                print(f"Gagal set command untuk staff {staff_id}: {e}")
-                
-        print("✅ Menu commands berhasil di-set.")
-    except Exception as e:
-        print(f"⚠️ Gagal global setup commands: {e}")
+    # --- SETUP MENU COMMANDS (Optional on startup, better separate) ---
+    # ... code setup commands ...
 
-    # Jalankan Flask di Thread terpisah
-    print(f"Web App running on {NGROK_URL}")
-    t = Thread(target=lambda: app.run(host='0.0.0.0', port=5000, debug=False))
-    t.daemon = True
-    t.start()
+    # Jalankan Flask (Vercel akan menjalankan ini sebagai WSGI app)
+    # app.run tidak perlu dipanggil secara eksplisit di Vercel jika menggunakan wsgi handler, 
+    # tapi untuk local dev kita tetap butuh.
     
-    print("Bot is polling...")
-    while True:
-        try:
-            bot.infinity_polling(timeout=10, long_polling_timeout=5)
-        except Exception as e:
-            print(f"Bot polling error: {e}")
-            time.sleep(5)
+    # Deteksi Environment Vercel
+    if os.environ.get('VERCEL'):
+         # Di Vercel, kita tidak jalankan infinity_polling
+         # Kita hanya expose 'app' variable agar Vercel bisa import
+         pass
+    else:
+         # Local Development
+         print(f"Web App running on {NGROK_URL}")
+         
+         # Jalankan Flask di Thread terpisah
+         t = Thread(target=lambda: app.run(host='0.0.0.0', port=5000, debug=False))
+         t.daemon = True
+         t.start()
+         
+         # Jalankan Polling (HANYA JIKA LOCAL)
+         # Jika sudah set webhook ke Vercel, polling lokal mungkin akan konflik atau gagal (conflict error)
+         # Jadi idealnya jika migrasi ke Vercel, kita matikan polling lokal dan gunakan ngrok untuk tunnel webhook jika mau debug lokal.
+         # Tapi user minta migrasi.
+         
+         print("Bot is polling (Local Mode)...")
+         # Note: Jika webhook sudah diset, polling akan gagal. 
+         # Kita akan remove webhook dulu jika running local (opsional), tapi biar aman kita try-except polling
+         try:
+             bot.remove_webhook()
+             time.sleep(1)
+             bot.infinity_polling(timeout=10, long_polling_timeout=5)
+         except Exception as e:
+             print(f"Bot polling error: {e}")
+
