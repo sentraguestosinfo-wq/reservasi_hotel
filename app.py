@@ -20,7 +20,7 @@ from email.mime.image import MIMEImage
 # GANTI DENGAN TOKEN BOT ANDA
 API_TOKEN = '8556104756:AAGVZJyvrxV4P-yN486BH7K5SR_f8jRZDLw' 
 # URL Ngrok yang diberikan user (pastikan https)
-NGROK_URL = 'https://pauletta-nonrevertive-finally.ngrok-free.dev'
+NGROK_URL = 'https://reservasi-hotel-seven.vercel.app'
 
 # KONFIGURASI EMAIL
 GMAIL_USER = 'sentraguest.os@gmail.com'
