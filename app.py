@@ -1486,7 +1486,7 @@ def test_db_route():
 
 @app.route('/version')
 def version_route():
-    return "App Version: 2.1 (Fix Staff Commands & IPv4 Patch)", 200
+    return "App Version: 2.2 (Fix HTML Dashboard & Staff Commands)", 200
 
 if __name__ == '__main__':
     # init_db() # Disabled for Supabase REST Migration

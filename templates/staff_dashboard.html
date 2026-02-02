@@ -115,8 +115,10 @@
     <div class="container">
         {% if mode == 'reservasi' %}
         <div class="tabs">
-            <div class="tab active" onclick="filter('confirmed', this)">Confirm</div>
-            <div class="tab" onclick="filter('cancelled', this)">Cancel</div>
+            <div class="tab active" onclick="filter('all', this)">All</div>
+            <div class="tab" onclick="filter('reserved', this)">Pending</div>
+            <div class="tab" onclick="filter('confirmed', this)">Confirmed</div>
+            <div class="tab" onclick="filter('cancelled', this)">Cancelled</div>
         </div>
         {% else %}
         <div class="tabs">
@@ -134,7 +136,7 @@
 
     <script>
         let allBookings = [];
-        let currentFilter = '{{ "" if mode == "reservasi" else "all" }}';
+        let currentFilter = 'all';
         const MODE = "{{ mode if mode else 'booking' }}";
 
         function loadBookings() {
@@ -174,12 +176,7 @@
             
             let filtered = [];
             if (MODE === 'reservasi') {
-                // Default: tampilkan semua (reserved, confirmed, cancelled)
-                if (!currentFilter) {
-                    filtered = allBookings;
-                } else {
-                    filtered = allBookings.filter(b => b.status === currentFilter);
-                }
+                filtered = allBookings.filter(b => currentFilter === 'all' || b.status === currentFilter);
             } else {
                 filtered = allBookings.filter(b => currentFilter === 'all' || b.status === currentFilter);
             }
