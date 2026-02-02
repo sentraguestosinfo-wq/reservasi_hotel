@@ -1551,6 +1551,10 @@ def test_db_route():
     except Exception as e:
         return f"Database Connection Failed: {str(e)}", 500
 
+@app.route('/version')
+def version_route():
+    return "App Version: 1.2 (Supabase Integration)", 200
+
 if __name__ == '__main__':
     init_db()
     print("\n\n=======================================================")
