@@ -798,8 +798,8 @@ def cetak_lap_harian(message):
             pdf.cell(col_widths[5], 8, via_disp, 1, 0, 'C')
             pdf.ln()
             
-        # Simpan File Sementara
-        filename = f"Laporan_Harian_{today_str}.pdf"
+        # Simpan File Sementara (Gunakan /tmp/ untuk Vercel)
+        filename = f"/tmp/Laporan_Harian_{today_str}.pdf"
         pdf.output(filename)
         
         # 3. Kirim File
@@ -891,7 +891,7 @@ def cetak_laporan_reservasi(message):
             pdf.cell(col_widths[6], 8, status_disp, 1, 0, 'C')
             pdf.ln()
         
-        filename = f"Laporan_Reservasi_{today_str}.pdf"
+        filename = f"/tmp/Laporan_Reservasi_{today_str}.pdf"
         pdf.output(filename)
         
         with open(filename, 'rb') as f:
