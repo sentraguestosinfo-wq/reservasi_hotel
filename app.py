@@ -32,8 +32,8 @@ except Exception as e:
 
 # GANTI DENGAN TOKEN BOT ANDA
 API_TOKEN = '8556104756:AAGVZJyvrxV4P-yN486BH7K5SR_f8jRZDLw' 
-# URL Ngrok yang diberikan user (pastikan https)
-NGROK_URL = 'https://reservasi-hotel-seven.vercel.app'
+# URL Aplikasi (Vercel)
+APP_URL = 'https://reservasi-hotel-seven.vercel.app'
 
 # SUPABASE CONFIG (REST API MODE)
 SUPABASE_URL = "https://relkgipocdukdusakdtv.supabase.co"
@@ -156,7 +156,7 @@ def wa_redirect():
         if clean_phone.startswith('0'):
             clean_phone = '62' + clean_phone[1:]
             
-        wa_text = f"Halo {format_guest_name(nama_db)}, ini dari Mercure Bandung Nexa Supratman (Resi: {resi}).\n\nBerikut Link QRIS untuk pembayaran:\n{NGROK_URL}/qris_image\n\nMohon konfirmasi jika sudah transfer. Terima kasih 🙏"
+        wa_text = f"Halo {format_guest_name(nama_db)}, ini dari Mercure Bandung Nexa Supratman (Resi: {resi}).\n\nBerikut Link QRIS untuk pembayaran:\n{APP_URL}/qris_image\n\nMohon konfirmasi jika sudah transfer. Terima kasih 🙏"
         
         wa_link = f"https://wa.me/{clean_phone}?text={urllib.parse.quote(wa_text)}"
         
@@ -1499,7 +1499,7 @@ def init_webhook():
         time.sleep(0.5)
         
         # Set webhook ke URL Vercel saat ini
-        webhook_url = f"{NGROK_URL}/webhook"
+        webhook_url = f"{APP_URL}/webhook"
         bot.set_webhook(url=webhook_url)
         
         return f"Webhook successfully set to: {webhook_url}", 200
@@ -1539,7 +1539,6 @@ if __name__ == '__main__':
          pass
     else:
          # Local Development
-         # print(f"Web App running on {NGROK_URL}") # Hapus referensi Ngrok
          print(f"Web App running on Local/Dev")
          
          # Jalankan Flask di Thread terpisah
