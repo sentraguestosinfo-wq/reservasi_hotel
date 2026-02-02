@@ -2,8 +2,6 @@
 import telebot
 from telebot import types
 from flask import Flask, render_template, request, jsonify, send_file, redirect, make_response
-import psycopg2
-from psycopg2.extras import RealDictCursor
 from datetime import datetime, timedelta
 from threading import Thread
 import os
@@ -16,7 +14,7 @@ import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from email.mime.image import MIMEImage
-import socket  # Added for DNS resolution
+import socket
 from supabase import create_client, Client
 
 # --- KONFIGURASI ---
@@ -63,40 +61,14 @@ def format_guest_name(name):
     except:
         return f"Mr/Mrs {name}"
 
+# Placeholder for backward compatibility during refactoring
 def get_db_connection():
-    try:
-        # Use resolved URI to force IPv4
-        resolved_uri, _ = get_resolved_db_uri_debug()
-        conn = psycopg2.connect(resolved_uri, connect_timeout=10)
-        return conn
-    except Exception as e:
-        print(f"Database connection error: {e}")
-        return None
+    print("WARNING: get_db_connection is deprecated. Use 'supabase' client directly.")
+    return None
 
 def init_db():
-    conn = get_db_connection()
-    if not conn:
-        print("Could not connect to database for initialization.")
-        return
-
-    try:
-        c = conn.cursor()
-        # Create Table if not exists (PostgreSQL Syntax)
-        c.execute('''CREATE TABLE IF NOT EXISTS bookings
-                     (resi TEXT PRIMARY KEY, chat_id TEXT, nama TEXT, 
-                      tipe TEXT, tgl TEXT, jml_kamar TEXT, orang TEXT, harga TEXT, qris_status TEXT, phone TEXT,
-                      email TEXT, status TEXT DEFAULT 'pending', created_at TIMESTAMP, via TEXT, 
-                      lat DOUBLE PRECISION, lng DOUBLE PRECISION, extended INTEGER DEFAULT 0, category TEXT DEFAULT 'booking')''')
-        
-        # Create Indexes (Optional but good)
-        c.execute("CREATE INDEX IF NOT EXISTS idx_bookings_created_at ON bookings(created_at)")
-        c.execute("CREATE INDEX IF NOT EXISTS idx_bookings_status ON bookings(status)")
-        
-        conn.commit()
-    except Exception as e:
-        print(f"Init DB Error: {e}")
-    finally:
-        conn.close()
+    # Supabase setup is done via Dashboard/SQL Editor, not here.
+    pass
     
     # No explicit migration needed for new DB setup as we define full schema above.
     # If we need to alter existing tables later, we should check column existence.
@@ -1562,7 +1534,7 @@ def version_route():
     return "App Version: 2.0 (Supabase REST API - No IPv6 Issues)", 200
 
 if __name__ == '__main__':
-    init_db()
+    # init_db() # Disabled for Supabase REST Migration
     print("\n\n=======================================================")
     print(">>> SGO V1.1 LOADED: VERCEL MODE <<<")
     print("=======================================================\n")
