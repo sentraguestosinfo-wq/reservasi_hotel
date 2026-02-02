@@ -26,68 +26,14 @@ API_TOKEN = '8556104756:AAGVZJyvrxV4P-yN486BH7K5SR_f8jRZDLw'
 NGROK_URL = 'https://reservasi-hotel-seven.vercel.app'
 
 # DB URI
-# Menggunakan Port 6543 (Supavisor Session Mode) untuk kompatibilitas IPv4/Vercel
-# Menambahkan ?sslmode=require untuk keamanan
-DB_URI = "postgresql://postgres:sentraguest%407478@db.relkgipocdukdusakdtv.supabase.co:6543/postgres?sslmode=require"
-
-def get_resolved_db_uri_debug():
-    """
-    Resolves the database hostname to an IPv4 address using Google DNS (8.8.8.8) 
-    to bypass local/Vercel DNS issues.
-    Returns (resolved_uri, debug_info)
-    """
-    debug_log = []
-    try:
-        # Parse URI
-        result = urllib.parse.urlparse(DB_URI)
-        hostname = result.hostname
-        debug_log.append(f"Target Hostname: {hostname}")
-        
-        # 1. Try Custom DNS (Google DNS)
-        try:
-            resolver = dns.resolver.Resolver()
-            resolver.nameservers = ['8.8.8.8', '8.8.4.4']
-            answers = resolver.resolve(hostname, 'A')
-            
-            ipv4_list = [r.to_text() for r in answers]
-            debug_log.append(f"Google DNS returned A records: {ipv4_list}")
-            
-            if ipv4_list:
-                ipv4 = ipv4_list[0]
-                debug_log.append(f"Using Google DNS IPv4: {ipv4}")
-                
-                # Reconstruct URI
-                new_netloc = result.netloc.replace(hostname, ipv4)
-                resolved_uri = result._replace(netloc=new_netloc).geturl()
-                return resolved_uri, "\n".join(debug_log)
-                
-        except Exception as dns_e:
-            debug_log.append(f"Google DNS lookup failed: {dns_e}")
-
-        # 2. Fallback to System DNS (getaddrinfo)
-        debug_log.append("Falling back to System DNS...")
-        addr_infos = socket.getaddrinfo(hostname, None, family=socket.AF_INET, type=socket.SOCK_STREAM)
-        
-        if not addr_infos:
-             debug_log.append("System DNS: No IPv4 address found.")
-             return DB_URI, "\n".join(debug_log)
-             
-        ipv4 = addr_infos[0][4][0]
-        debug_log.append(f"System DNS IPv4: {ipv4}")
-        
-        new_netloc = result.netloc.replace(hostname, ipv4)
-        resolved_uri = result._replace(netloc=new_netloc).geturl()
-        return resolved_uri, "\n".join(debug_log)
-
-    except Exception as e:
-        debug_log.append(f"Resolution process failed: {e}")
-        return DB_URI, "\n".join(debug_log)
+# DB URI
+# Menggunakan Regional Supavisor (Singapore) untuk IPv4 Support
+# Format User: [db_user].[project_ref]
+DB_URI = "postgresql://postgres.relkgipocdukdusakdtv:sentraguest%407478@aws-0-ap-southeast-1.pooler.supabase.com:6543/postgres?sslmode=require"
 
 def get_db_connection():
     try:
-        # Use resolved URI to force IPv4
-        resolved_uri, _ = get_resolved_db_uri_debug()
-        conn = psycopg2.connect(resolved_uri, connect_timeout=10)
+        conn = psycopg2.connect(DB_URI, connect_timeout=10)
         return conn
     except Exception as e:
         print(f"Database connection error: {e}")
@@ -1611,21 +1557,18 @@ def init_webhook():
 @app.route('/test_db')
 def test_db_route():
     try:
-        resolved_uri, debug_log = get_resolved_db_uri_debug()
-        conn = psycopg2.connect(resolved_uri, connect_timeout=10)
+        conn = psycopg2.connect(DB_URI, connect_timeout=10)
         cur = conn.cursor()
         cur.execute("SELECT version()")
         ver = cur.fetchone()
         conn.close()
-        return f"Database Connected! Version: {ver}<br><br><b>Debug Log:</b><br><pre>{debug_log}</pre>", 200
+        return f"Database Connected! Version: {ver} (Supavisor IPv4)", 200
     except Exception as e:
-        # Re-get debug log if it wasn't captured above (unlikely)
-        _, debug_log = get_resolved_db_uri_debug()
-        return f"Database Connection Failed: {str(e)}<br><br><b>Debug Log:</b><br><pre>{debug_log}</pre>", 500
+        return f"Database Connection Failed: {str(e)}", 500
 
 @app.route('/version')
 def version_route():
-    return "App Version: 1.6 (Google DNS Bypass)", 200
+    return "App Version: 1.7 (Supavisor Regional Pooler)", 200
 
 if __name__ == '__main__':
     init_db()
