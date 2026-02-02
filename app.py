@@ -26,6 +26,7 @@ try:
         return [response for response in responses if response[0] == socket.AF_INET]
     socket.getaddrinfo = new_getaddrinfo
     print("IPv4 Forced for socket connections.")
+    print("App Version: 2.1 - Fix Handler Clash & Calendar")
 except Exception as e:
     print(f"Failed to force IPv4: {e}")
 
@@ -654,7 +655,7 @@ def cek_pembayaran(message):
                      "📝 Melihat Detail Booking Tamu",
                      parse_mode='Markdown', reply_markup=markup)
 
-@bot.message_handler(commands=['date_reservasi', 'calendar'])
+@bot.message_handler(commands=['date_reservasi', 'calendar', 'kalender'])
 def bot_date_reservasi(message):
     print(f"DEBUG: /date_reservasi accessed by {message.chat.id}")
     if message.chat.id not in STAFF_FO_IDS:
