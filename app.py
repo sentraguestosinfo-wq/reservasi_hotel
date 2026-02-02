@@ -24,7 +24,9 @@ API_TOKEN = '8556104756:AAGVZJyvrxV4P-yN486BH7K5SR_f8jRZDLw'
 NGROK_URL = 'https://reservasi-hotel-seven.vercel.app'
 
 # DB URI
-DB_URI = "postgresql://postgres:sentraguest%407478@db.relkgipocdukdusakdtv.supabase.co:5432/postgres"
+# Menggunakan Port 6543 (Supavisor Session Mode) untuk kompatibilitas IPv4/Vercel
+# Menambahkan ?sslmode=require untuk keamanan
+DB_URI = "postgresql://postgres:sentraguest%407478@db.relkgipocdukdusakdtv.supabase.co:6543/postgres?sslmode=require"
 
 # KONFIGURASI EMAIL
 GMAIL_USER = 'sentraguest.os@gmail.com'
@@ -1553,7 +1555,7 @@ def test_db_route():
 
 @app.route('/version')
 def version_route():
-    return "App Version: 1.2 (Supabase Integration)", 200
+    return "App Version: 1.3 (Supavisor Port 6543)", 200
 
 if __name__ == '__main__':
     init_db()
