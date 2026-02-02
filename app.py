@@ -2,7 +2,8 @@
 import telebot
 from telebot import types
 from flask import Flask, render_template, request, jsonify, send_file, redirect, make_response
-import sqlite3
+import psycopg2
+from psycopg2.extras import RealDictCursor
 from datetime import datetime, timedelta
 from threading import Thread
 import os
@@ -21,6 +22,9 @@ from email.mime.image import MIMEImage
 API_TOKEN = '8556104756:AAGVZJyvrxV4P-yN486BH7K5SR_f8jRZDLw' 
 # URL Ngrok yang diberikan user (pastikan https)
 NGROK_URL = 'https://reservasi-hotel-seven.vercel.app'
+
+# DB URI
+DB_URI = "postgresql://postgres:sentraguest%407478@db.relkgipocdukdusakdtv.supabase.co:5432/postgres"
 
 # KONFIGURASI EMAIL
 GMAIL_USER = 'sentraguest.os@gmail.com'
@@ -53,68 +57,44 @@ def format_guest_name(name):
     except:
         return f"Mr/Mrs {name}"
 
+def get_db_connection():
+    try:
+        conn = psycopg2.connect(DB_URI)
+        return conn
+    except Exception as e:
+        print(f"Database connection error: {e}")
+        return None
+
 def init_db():
-    conn = sqlite3.connect('mercure_nexa.db')
-    c = conn.cursor()
-    # Create Table if not exists (Old Schema)
-    c.execute('''CREATE TABLE IF NOT EXISTS bookings
-                 (resi TEXT PRIMARY KEY, chat_id TEXT, nama TEXT, 
-                  tipe TEXT, tgl TEXT, jml_kamar TEXT, orang TEXT, harga TEXT, qris_status TEXT, phone TEXT)''')
-    
-    # --- MIGRATION: Add New Columns for Auto-Cancel System ---
-    try:
-        c.execute("ALTER TABLE bookings ADD COLUMN email TEXT")
-    except: pass
-    
-    try:
-        c.execute("ALTER TABLE bookings ADD COLUMN status TEXT DEFAULT 'pending'")
-    except: pass
-    
-    try:
-        c.execute("ALTER TABLE bookings ADD COLUMN created_at TIMESTAMP")
-    except: pass
-    
-    try:
-        c.execute("ALTER TABLE bookings ADD COLUMN via TEXT")
-    except: pass
-    
-    try:
-        c.execute("ALTER TABLE bookings ADD COLUMN lat REAL")
-    except: pass
-    
-    try:
-        c.execute("ALTER TABLE bookings ADD COLUMN lng REAL")
-    except: pass
+    conn = get_db_connection()
+    if not conn:
+        print("Could not connect to database for initialization.")
+        return
 
     try:
-        c.execute("ALTER TABLE bookings ADD COLUMN extended INTEGER DEFAULT 0")
-    except: pass
-
-    try:
-        c.execute("ALTER TABLE bookings ADD COLUMN category TEXT DEFAULT 'booking'")
-    except: pass
-
-    try:
-        c.execute("ALTER TABLE bookings ADD COLUMN orang TEXT")
-    except: pass
-
-    conn.commit()
-    conn.close()
-    migrate_categories()
+        c = conn.cursor()
+        # Create Table if not exists (PostgreSQL Syntax)
+        c.execute('''CREATE TABLE IF NOT EXISTS bookings
+                     (resi TEXT PRIMARY KEY, chat_id TEXT, nama TEXT, 
+                      tipe TEXT, tgl TEXT, jml_kamar TEXT, orang TEXT, harga TEXT, qris_status TEXT, phone TEXT,
+                      email TEXT, status TEXT DEFAULT 'pending', created_at TIMESTAMP, via TEXT, 
+                      lat DOUBLE PRECISION, lng DOUBLE PRECISION, extended INTEGER DEFAULT 0, category TEXT DEFAULT 'booking')''')
+        
+        # Create Indexes (Optional but good)
+        c.execute("CREATE INDEX IF NOT EXISTS idx_bookings_created_at ON bookings(created_at)")
+        c.execute("CREATE INDEX IF NOT EXISTS idx_bookings_status ON bookings(status)")
+        
+        conn.commit()
+    except Exception as e:
+        print(f"Init DB Error: {e}")
+    finally:
+        conn.close()
+    
+    # No explicit migration needed for new DB setup as we define full schema above.
+    # If we need to alter existing tables later, we should check column existence.
 
 def migrate_categories():
-    try:
-        conn = sqlite3.connect('mercure_nexa.db', timeout=10)
-        c = conn.cursor()
-        # Set category berdasarkan prefix resi
-        c.execute("UPDATE bookings SET category = 'reservation' WHERE (category IS NULL OR category = '') AND resi LIKE 'RSV-%'")
-        c.execute("UPDATE bookings SET category = 'booking' WHERE (category IS NULL OR category = '') AND resi LIKE 'NEXA-%'")
-        # Normalisasi status reservasi: pending -> reserved
-        c.execute("UPDATE bookings SET status = 'reserved' WHERE category = 'reservation' AND (status IS NULL OR status = '' OR status = 'pending')")
-        conn.commit()
-        conn.close()
-    except Exception as e:
-        print(f"Migration error: {e}")
+    pass # Not needed for fresh Supabase DB
 
 @app.route('/')
 def index():
@@ -157,10 +137,12 @@ def wa_redirect():
             return "Invalid request: Missing resi", 400
             
         # 1. Ambil data booking
-        conn = sqlite3.connect('mercure_nexa.db', timeout=10)
+        conn = get_db_connection()
+        if not conn:
+            return "Database Error", 500
         try:
             c = conn.cursor()
-            c.execute("SELECT phone, nama FROM bookings WHERE resi = ?", (resi,))
+            c.execute("SELECT phone, nama FROM bookings WHERE resi = %s", (resi,))
             result = c.fetchone()
             if not result:
                 return "Booking not found", 404
@@ -168,7 +150,7 @@ def wa_redirect():
             phone_db, nama_db = result
             
             # Update status QRIS
-            c.execute("UPDATE bookings SET qris_status = 'sent' WHERE resi = ?", (resi,))
+            c.execute("UPDATE bookings SET qris_status = 'sent' WHERE resi = %s", (resi,))
             conn.commit()
         finally:
             conn.close()
@@ -328,19 +310,24 @@ def submit_reservasi():
         
         # Simpan ke DB dengan status 'reservation' (Bukan 'pending')
         # Category = 'reservation'
-        conn = sqlite3.connect('mercure_nexa.db', timeout=10)
-        c = conn.cursor()
+        conn = get_db_connection()
+        if not conn:
+            return jsonify({"status": "error", "message": "Database error"}), 500
         
-        # Insert
-        c.execute("""INSERT INTO bookings 
-                        (resi, chat_id, nama, tipe, tgl, jml_kamar, orang, harga, qris_status, phone, 
-                        email, via, lat, lng, created_at, status, extended, category) 
-                        VALUES (?,?,?,?,?,?,?,?,?,?, ?,?,?,?,?, 'reserved', 0, 'reservation')""", 
-                    (resi, chat_id, data_req['nama'], data_req['tipe'], data_req['tgl'], 
-                    data_req['jml_kamar'], data_req['orang'], data_req['total_harga'], 'pending', phone,
-                    email, 'web', 0, 0, current_time))
-        conn.commit()
-        conn.close()
+        try:
+            c = conn.cursor()
+            
+            # Insert
+            c.execute("""INSERT INTO bookings 
+                            (resi, chat_id, nama, tipe, tgl, jml_kamar, orang, harga, qris_status, phone, 
+                            email, via, lat, lng, created_at, status, extended, category) 
+                            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s, %s,%s,%s,%s,%s, 'reserved', 0, 'reservation')""", 
+                        (resi, chat_id, data_req['nama'], data_req['tipe'], data_req['tgl'], 
+                        data_req['jml_kamar'], data_req['orang'], data_req['total_harga'], 'pending', phone,
+                        email, 'web', 0, 0, current_time))
+            conn.commit()
+        finally:
+            conn.close()
 
         # Email Konfirmasi Reservasi
         try:
@@ -465,13 +452,15 @@ def submit_booking():
         if via == 'web' and (not email or email == '-'):
             return jsonify({"status": "error", "message": "Email wajib diisi untuk booking via Web"}), 400
 
-        conn = sqlite3.connect('mercure_nexa.db', timeout=10)
+        conn = get_db_connection()
+        if not conn:
+            return jsonify({"status": "error", "message": "Database error"}), 500
         try:
             c = conn.cursor()
             
             # --- ANTI-DUPLICATE CHECK (10 Menit) ---
             # Cek apakah ada booking dengan Nama & Tanggal & HP yang sama dalam 10 menit terakhir
-            c.execute("SELECT resi FROM bookings WHERE nama = ? AND tgl = ? AND phone = ?", 
+            c.execute("SELECT resi FROM bookings WHERE nama = %s AND tgl = %s AND phone = %s", 
                       (data_req['nama'], data_req['tgl'], phone))
             existing = c.fetchall()
             
@@ -496,7 +485,7 @@ def submit_booking():
             c.execute("""INSERT INTO bookings 
                          (resi, chat_id, nama, tipe, tgl, jml_kamar, orang, harga, qris_status, phone, 
                           email, via, lat, lng, created_at, status, extended) 
-                         VALUES (?,?,?,?,?,?,?,?,?,?, ?,?,?,?,?, 'pending', 0)""", 
+                         VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s, %s,%s,%s,%s,%s, 'pending', 0)""", 
                       (resi, chat_id, data_req['nama'], data_req['tipe'], data_req['tgl'], 
                        data_req['jml_kamar'], data_req['orang'], data_req['total_harga'], 'pending', phone,
                        email, via, lat, lng, current_time))
@@ -659,7 +648,11 @@ def cek_booking(message):
         print(f"DEBUG: Access denied for {message.chat.id}")
         return
 
-    conn = sqlite3.connect('mercure_nexa.db', timeout=10)
+    conn = get_db_connection()
+    if not conn:
+        bot.send_message(message.chat.id, "❌ Database Connection Error")
+        return
+        
     try:
         c = conn.cursor()
         # Ambil 5 booking terakhir (kategori booking saja)
@@ -752,12 +745,19 @@ def cetak_lap_harian(message):
         today_str = datetime.now().strftime('%y%m%d') # Format YYMMDD sesuai Resi NEXA-YYMMDD...
         date_display = datetime.now().strftime('%d %B %Y')
         
-        conn = sqlite3.connect('mercure_nexa.db', timeout=10)
-        c = conn.cursor()
-        # Filter resi yang diawali NEXA-YYMMDD
-        c.execute("SELECT resi, nama, phone, tgl, tipe, orang, via FROM bookings WHERE resi LIKE ?", (f'NEXA-{today_str}%',))
-        bookings = c.fetchall()
-        conn.close()
+        conn = get_db_connection()
+        if not conn:
+             bot.send_message(message.chat.id, "❌ Database Error")
+             return
+             
+        try:
+            c = conn.cursor()
+            # Filter resi yang diawali NEXA-YYMMDD
+            # Postgres LIKE % is correct, but parameter syntax
+            c.execute("SELECT resi, nama, phone, tgl, tipe, orang, via FROM bookings WHERE resi LIKE %s", (f'NEXA-{today_str}%',))
+            bookings = c.fetchall()
+        finally:
+            conn.close()
         
         if not bookings:
             bot.send_message(message.chat.id, "📭 Belum ada data booking untuk hari ini.")
@@ -848,11 +848,17 @@ def cetak_laporan_reservasi(message):
         today_str = datetime.now().strftime('%y%m%d')
         date_display = datetime.now().strftime('%d %B %Y')
         
-        conn = sqlite3.connect('mercure_nexa.db', timeout=10)
-        c = conn.cursor()
-        c.execute("SELECT resi, nama, tgl, tipe, jml_kamar, orang, status, phone FROM bookings WHERE category = 'reservation' AND resi LIKE ?", (f'RSV-{today_str}%',))
-        rows = c.fetchall()
-        conn.close()
+        conn = get_db_connection()
+        if not conn:
+            bot.send_message(message.chat.id, "❌ Database Error")
+            return
+            
+        try:
+            c = conn.cursor()
+            c.execute("SELECT resi, nama, tgl, tipe, jml_kamar, orang, status, phone FROM bookings WHERE category = 'reservation' AND resi LIKE %s", (f'RSV-{today_str}%',))
+            rows = c.fetchall()
+        finally:
+            conn.close()
         
         if not rows:
             bot.send_message(message.chat.id, "📭 Belum ada data reservasi untuk hari ini.")
@@ -973,18 +979,17 @@ def handle_qris(call):
 
         guest_name = None
         try:
-            conn = sqlite3.connect('mercure_nexa.db', timeout=10)
-            c = conn.cursor()
-            c.execute("SELECT nama FROM bookings WHERE resi = ?", (resi,))
-            row = c.fetchone()
-            guest_name = row[0] if row else None
+            conn = get_db_connection()
+            if conn:
+                try:
+                    c = conn.cursor()
+                    c.execute("SELECT nama FROM bookings WHERE resi = %s", (resi,))
+                    row = c.fetchone()
+                    guest_name = row[0] if row else None
+                finally:
+                    conn.close()
         except Exception as _:
             guest_name = None
-        finally:
-            try:
-                conn.close()
-            except:
-                pass
 
         # Cek file QRIS
         if not os.path.exists('qris.jpeg'):
@@ -1008,15 +1013,16 @@ def handle_qris(call):
             bot.send_message(call.message.chat.id, f"✅ QRIS berhasil dikirim ke tamu dengan Resi {resi}.")
             
             # Update status di database
-            conn = sqlite3.connect('mercure_nexa.db', timeout=10)
-            try:
-                c = conn.cursor()
-                c.execute("UPDATE bookings SET qris_status = 'sent' WHERE resi = ?", (resi,))
-                conn.commit()
-            except Exception as db_err:
-                print(f"Gagal update status QRIS: {db_err}")
-            finally:
-                conn.close()
+            conn = get_db_connection()
+            if conn:
+                try:
+                    c = conn.cursor()
+                    c.execute("UPDATE bookings SET qris_status = 'sent' WHERE resi = %s", (resi,))
+                    conn.commit()
+                except Exception as db_err:
+                    print(f"Gagal update status QRIS: {db_err}")
+                finally:
+                    conn.close()
 
             # Update tombol/pesan di chat Staff agar langsung berubah jadi 'Terkirim'
             try:
@@ -1074,14 +1080,20 @@ def handle_qris_email(call):
         guest_chat_id = parts[3]
         
         # Ambil data booking dari DB untuk dapat email
-        conn = sqlite3.connect('mercure_nexa.db', timeout=10)
-        c = conn.cursor()
-        c.execute("SELECT email, nama, harga, created_at, qris_status FROM bookings WHERE resi = ?", (resi,))
-        row = c.fetchone()
+        conn = get_db_connection()
+        if not conn:
+            bot.answer_callback_query(call.id, "Database Error ❌")
+            return
+            
+        try:
+            c = conn.cursor()
+            c.execute("SELECT email, nama, harga, created_at, qris_status FROM bookings WHERE resi = %s", (resi,))
+            row = c.fetchone()
+        finally:
+            conn.close()
         
         if not row:
             bot.answer_callback_query(call.id, "Data booking tidak ditemukan ❌")
-            conn.close()
             return
             
         email, nama, total_harga, created_at_str, qris_status = row
@@ -1098,19 +1110,19 @@ def handle_qris_email(call):
                 bot.edit_message_reply_markup(chat_id=call.message.chat.id, message_id=call.message.message_id, reply_markup=markup)
             except Exception as ui_err:
                 print(f"Error update UI (already sent): {ui_err}")
-            conn.close()
             return
         
         # Calculate Deadline & Booking Time
         try:
-             # created_at might be string 'YYYY-MM-DD HH:MM:SS.ssssss' or similar
+             # created_at might be datetime object or string
              if not created_at_str:
-                 # Jika tidak ada created_at (booking lama), gunakan waktu sekarang sebagai fallback
                  booking_dt = datetime.now()
+             elif isinstance(created_at_str, datetime):
+                 booking_dt = created_at_str
              elif isinstance(created_at_str, str):
                  booking_dt = datetime.strptime(created_at_str.split('.')[0], "%Y-%m-%d %H:%M:%S")
              else:
-                 booking_dt = created_at_str
+                 booking_dt = datetime.now() # Fallback
              
              booking_time_str = booking_dt.strftime('%H:%M')
              deadline_dt = booking_dt + timedelta(hours=2)
@@ -1136,8 +1148,14 @@ def handle_qris_email(call):
             send_qris_email(email, booking_data)
             
             # Update Status di DB
-            c.execute("UPDATE bookings SET qris_status = 'sent' WHERE resi = ?", (resi,))
-            conn.commit()
+            conn = get_db_connection()
+            if conn:
+                try:
+                    c = conn.cursor()
+                    c.execute("UPDATE bookings SET qris_status = 'sent' WHERE resi = %s", (resi,))
+                    conn.commit()
+                finally:
+                    conn.close()
             
             bot.answer_callback_query(call.id, "Email QRIS Terkirim! ✅")
             bot.send_message(call.message.chat.id, f"✅ Email QRIS berhasil dikirim ke {email} (Resi: {resi}).")
@@ -1167,9 +1185,6 @@ def handle_qris_email(call):
             print(f"Gagal kirim email: {e}")
             bot.answer_callback_query(call.id, "Gagal kirim email ❌")
             bot.send_message(call.message.chat.id, f"❌ Error send email: {e}")
-             
-        finally:
-            conn.close()
             
     except Exception as e:
         print(f"Error handle_qris_email: {e}")
@@ -1192,98 +1207,74 @@ def check_expired_bookings():
     print("Background Task Started: Auto-Cancel & Geolocation Check")
     while True:
         try:
-            conn = sqlite3.connect('mercure_nexa.db', timeout=10)
-            c = conn.cursor()
-            
-            # 1. Cari booking 'pending' yang sudah > 2 jam
-            # Menggunakan SQLite datetime modification
-            # now > created_at + 2 hours
-            # atau created_at < now - 2 hours
-            
-            two_hours_ago = datetime.now() - timedelta(hours=2)
-            
-            # Kita perlu convert datetime python ke format string yg disimpan di DB jika perlu
-            # Tapi created_at disimpan sebagai TIMESTAMP, sqlite adapter handle datetime objects usually if configured,
-            # tapi di submit_booking kita insert object datetime directly.
-            # SQLite secara default simpan sebagai string "YYYY-MM-DD HH:MM:SS.mmmmmm"
-            
-            c.execute("SELECT resi, nama, chat_id, lat, lng, created_at, extended FROM bookings WHERE status = 'pending'")
-            rows = c.fetchall()
-            
-            for row in rows:
-                resi, nama, chat_id, lat, lng, created_at_str, extended = row
-                
-                # Parse created_at
-                if not created_at_str:
-                    continue
-
+            conn = get_db_connection()
+            if conn:
                 try:
-                    if isinstance(created_at_str, str):
-                        created_at = datetime.strptime(created_at_str, '%Y-%m-%d %H:%M:%S.%f')
-                    else:
-                        created_at = created_at_str # Jika adapter sudah convert
-                except:
-                    # Fallback format lain jika perlu
-                    try:
-                        created_at = datetime.strptime(created_at_str, '%Y-%m-%d %H:%M:%S')
-                    except:
-                        continue
-
-                # Cek expired
-                if datetime.now() > created_at + timedelta(hours=2):
-                    # SUDAH EXPIRED
+                    c = conn.cursor()
                     
-                    # Cek Geolocation untuk Extend (Jika belum pernah extended)
-                    should_extend = False
+                    # 1. Cari booking 'pending' yang sudah > 2 jam
+                    # PostgreSQL interval syntax
+                    time_threshold = datetime.now() - timedelta(hours=2)
                     
-                    # Titik Koordinat Hotel Mercure Bandung Nexa Supratman (Hardcoded/From data.py)
-                    # Lat: -6.9088, Lng: 107.6285
-                    HOTEL_LAT = -6.9088
-                    HOTEL_LNG = 107.6285
+                    c.execute("SELECT resi, nama, chat_id, lat, lng, created_at, extended FROM bookings WHERE status = 'pending' AND created_at < %s", (time_threshold,))
+                    rows = c.fetchall()
                     
-                    if not extended and lat and lng:
-                        # Cek jarak
-                        dist = calculate_distance(lat, lng, HOTEL_LAT, HOTEL_LNG)
-                        print(f"DEBUG: Booking {resi} expired. Dist: {dist:.2f} km")
+                    for row in rows:
+                        resi, nama, chat_id, lat, lng, created_at, extended = row
+                
                         
-                        if dist < 10: # Radius aman 10 km
-                            should_extend = True
-                    
-                    if should_extend:
-                        # EXTEND 30 Menit (Update created_at + 30 menit)
-                        # Logikanya: Kita geser created_at seolah-olah booking baru dibuat 30 menit setelah aslinya?
-                        # Atau kita biarkan created_at tapi tidak cancel?
-                        # Lebih mudah: update created_at += 30 menit
+                        # Cek Geolocation untuk Extend (Jika belum pernah extended)
+                        should_extend = False
                         
-                        new_created_at = created_at + timedelta(minutes=30)
-                        c.execute("UPDATE bookings SET created_at = ?, extended = 1 WHERE resi = ?", (new_created_at, resi))
-                        conn.commit()
+                        # Titik Koordinat Hotel Mercure Bandung Nexa Supratman (Hardcoded/From data.py)
+                        # Lat: -6.9088, Lng: 107.6285
+                        HOTEL_LAT = -6.9088
+                        HOTEL_LNG = 107.6285
                         
-                        msg_ext = f"⏳ Booking {resi} ({nama}) diperpanjang 30 menit otomatis karena posisi tamu dekat ({dist:.1f} km)."
-                        print(msg_ext)
-                        
-                        # Notif FO
-                        for sid in STAFF_FO_IDS:
-                            bot.send_message(sid, msg_ext)
+                        if not extended and lat and lng:
+                            # Cek jarak
+                            dist = calculate_distance(lat, lng, HOTEL_LAT, HOTEL_LNG)
+                            print(f"DEBUG: Booking {resi} expired. Dist: {dist:.2f} km")
                             
-                    else:
-                        # CANCEL
-                        c.execute("UPDATE bookings SET status = 'cancelled' WHERE resi = ?", (resi,))
-                        conn.commit()
+                            if dist < 10: # Radius aman 10 km
+                                should_extend = True
                         
-                        print(f"Booking {resi} ({nama}) dicancel otomatis (Expired > 2 jam).")
-                        
-                        # Notif Tamu
-                        if chat_id != 'unknown':
-                            try:
-                                bot.send_message(chat_id, f"⚠️ *BOOKING EXPIRED*\nBooking Anda {resi} telah dibatalkan otomatis karena melewati batas waktu hold 2 jam.", parse_mode='Markdown')
-                            except: pass
+                        if should_extend:
+                            # EXTEND 30 Menit (Update created_at + 30 menit)
+                            new_created_at = created_at + timedelta(minutes=30)
+                            c.execute("UPDATE bookings SET created_at = %s, extended = 1 WHERE resi = %s", (new_created_at, resi))
+                            conn.commit()
                             
-                        # Notif FO
-                        for sid in STAFF_FO_IDS:
-                            bot.send_message(sid, f"❌ Booking {resi} ({nama}) otomatis DIBATALKAN (Expired 2 Jam).")
+                            msg_ext = f"⏳ Booking {resi} ({nama}) diperpanjang 30 menit otomatis karena posisi tamu dekat ({dist:.1f} km)."
+                            print(msg_ext)
                             
-            conn.close()
+                            # Notif FO
+                            for sid in STAFF_FO_IDS:
+                                try:
+                                    bot.send_message(sid, msg_ext)
+                                except: pass
+                                
+                        else:
+                            # CANCEL
+                            c.execute("UPDATE bookings SET status = 'cancelled' WHERE resi = %s", (resi,))
+                            conn.commit()
+                            
+                            print(f"Booking {resi} ({nama}) dicancel otomatis (Expired > 2 jam).")
+                            
+                            # Notif Tamu
+                            if chat_id != 'unknown':
+                                try:
+                                    bot.send_message(chat_id, f"⚠️ *BOOKING EXPIRED*\nBooking Anda {resi} telah dibatalkan otomatis karena melewati batas waktu hold 2 jam.", parse_mode='Markdown')
+                                except: pass
+                                
+                            # Notif FO
+                            for sid in STAFF_FO_IDS:
+                                try:
+                                    bot.send_message(sid, f"❌ Booking {resi} ({nama}) otomatis DIBATALKAN (Expired 2 Jam).")
+                                except: pass
+                                
+                finally:
+                    conn.close()
             
         except Exception as e:
             print(f"Error background task: {e}")
@@ -1304,25 +1295,35 @@ import traceback
 def api_bookings():
     print("API Bookings Request Received - NEW VERSION CHECK")
     try:
-        conn = sqlite3.connect('mercure_nexa.db', timeout=10)
-        c = conn.cursor()
-        # Tambahkan kolom created_at di query
-        c.execute("SELECT resi, nama, tipe, tgl, jml_kamar, harga, status, email, via, created_at, orang FROM bookings WHERE category = 'booking' ORDER BY created_at DESC LIMIT 50")
-        rows = c.fetchall()
-        conn.close()
+        conn = get_db_connection()
+        if not conn:
+            return jsonify({"error": "Database connection error"}), 500
+        
+        try:
+            c = conn.cursor()
+            # Tambahkan kolom created_at di query
+            c.execute("SELECT resi, nama, tipe, tgl, jml_kamar, harga, status, email, via, created_at, orang FROM bookings WHERE category = 'booking' ORDER BY created_at DESC LIMIT 50")
+            rows = c.fetchall()
+        finally:
+            conn.close()
         
         data = []
         for r in rows:
             # Parse jam booking dari created_at
             jam_booking = '-'
             try:
-                if r[9]: # created_at column
-                    dt = datetime.strptime(r[9], '%Y-%m-%d %H:%M:%S.%f')
-                    jam_booking = dt.strftime('%H:%M')
+                # r[9] is created_at, which is likely a datetime object in Psycopg2
+                if r[9]:
+                    if isinstance(r[9], datetime):
+                        jam_booking = r[9].strftime('%H:%M')
+                    else:
+                        # Fallback for string
+                        dt = datetime.strptime(str(r[9]), '%Y-%m-%d %H:%M:%S.%f')
+                        jam_booking = dt.strftime('%H:%M')
             except:
                 try:
                     # Fallback format check
-                    dt = datetime.strptime(r[9], '%Y-%m-%d %H:%M:%S')
+                    dt = datetime.strptime(str(r[9]), '%Y-%m-%d %H:%M:%S')
                     jam_booking = dt.strftime('%H:%M')
                 except: pass
 
@@ -1370,25 +1371,33 @@ def staff_dashboard_reservasi():
 @app.route('/staff/api/reservasi')
 def api_reservasi():
     try:
-        conn = sqlite3.connect('mercure_nexa.db', timeout=10)
-        c = conn.cursor()
-        # Perbaiki query:
-        # 1. Hapus LIMIT 50 sementara untuk memastikan semua data muncul
-        # 2. Pastikan filter category benar
-        c.execute("SELECT resi, nama, tipe, tgl, jml_kamar, harga, status, email, via, created_at, orang FROM bookings WHERE category = 'reservation' ORDER BY created_at DESC")
-        rows = c.fetchall()
-        conn.close()
+        conn = get_db_connection()
+        if not conn:
+            return jsonify({"error": "Database connection error"}), 500
+            
+        try:
+            c = conn.cursor()
+            # Perbaiki query:
+            # 1. Hapus LIMIT 50 sementara untuk memastikan semua data muncul
+            # 2. Pastikan filter category benar
+            c.execute("SELECT resi, nama, tipe, tgl, jml_kamar, harga, status, email, via, created_at, orang FROM bookings WHERE category = 'reservation' ORDER BY created_at DESC")
+            rows = c.fetchall()
+        finally:
+            conn.close()
         
         data = []
         for r in rows:
             jam_booking = '-'
             try:
                 if r[9]:
-                    dt = datetime.strptime(r[9], '%Y-%m-%d %H:%M:%S.%f')
-                    jam_booking = dt.strftime('%H:%M')
+                    if isinstance(r[9], datetime):
+                        jam_booking = r[9].strftime('%H:%M')
+                    else:
+                        dt = datetime.strptime(str(r[9]), '%Y-%m-%d %H:%M:%S.%f')
+                        jam_booking = dt.strftime('%H:%M')
             except:
                 try:
-                    dt = datetime.strptime(r[9], '%Y-%m-%d %H:%M:%S')
+                    dt = datetime.strptime(str(r[9]), '%Y-%m-%d %H:%M:%S')
                     jam_booking = dt.strftime('%H:%M')
                 except: pass
             
@@ -1446,11 +1455,16 @@ def api_calendar_events():
         month_str = str(month).zfill(2)
         search_pattern = f"{year}-{month_str}%"
         
-        conn = sqlite3.connect('mercure_nexa.db', timeout=10)
-        c = conn.cursor()
-        c.execute("SELECT tgl, tipe, nama FROM bookings WHERE category = 'reservation' AND tgl LIKE ?", (search_pattern,))
-        rows = c.fetchall()
-        conn.close()
+        conn = get_db_connection()
+        if not conn:
+            return jsonify([]), 500
+        
+        try:
+            c = conn.cursor()
+            c.execute("SELECT tgl, tipe, nama FROM bookings WHERE category = 'reservation' AND tgl LIKE %s", (search_pattern,))
+            rows = c.fetchall()
+        finally:
+            conn.close()
         
         events = []
         for r in rows:
@@ -1475,11 +1489,16 @@ def api_update_status():
         if not resi or not new_status:
             return jsonify({"status": "error", "message": "Missing data"}), 400
             
-        conn = sqlite3.connect('mercure_nexa.db', timeout=10)
-        c = conn.cursor()
-        c.execute("UPDATE bookings SET status = ? WHERE resi = ?", (new_status, resi))
-        conn.commit()
-        conn.close()
+        conn = get_db_connection()
+        if not conn:
+             return jsonify({"status": "error", "message": "Database connection error"}), 500
+        
+        try:
+            c = conn.cursor()
+            c.execute("UPDATE bookings SET status = %s WHERE resi = %s", (new_status, resi))
+            conn.commit()
+        finally:
+            conn.close()
         
         # Optional: Notify Staff FO on Telegram about status change
         msg = f"📝 Status Booking {resi} diubah menjadi {new_status.upper()} via Dashboard."
