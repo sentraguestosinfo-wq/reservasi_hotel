@@ -615,11 +615,15 @@ def help_cmd(message):
 
 # --- FITUR STAFF FO (CEK BOOKING & QRIS) ---
 
-@bot.message_handler(commands=['dashboard_reservasi'])
+# --- FITUR STAFF FO (CEK BOOKING & QRIS) ---
+
+@bot.message_handler(commands=['dashboard_reservasi', 'dash_reservasi'])
 def dashboard_reservasi_cmd(message):
+    print(f"DEBUG: /dashboard_reservasi accessed by {message.chat.id}")
     if message.chat.id not in STAFF_FO_IDS:
         bot.send_message(message.chat.id, f"❌ Akses Ditolak. ID Anda: {message.chat.id} tidak terdaftar sebagai Staff FO.")
         return
+    
     url = f"{NGROK_URL}/staff/dashboard_reservasi"
     try:
         markup = types.InlineKeyboardMarkup()
@@ -631,6 +635,7 @@ def dashboard_reservasi_cmd(message):
 
 @bot.message_handler(commands=['cek_pembayaran'])
 def cek_pembayaran(message):
+    print(f"DEBUG: /cek_pembayaran accessed by {message.chat.id}")
     if message.chat.id not in STAFF_FO_IDS:
         bot.send_message(message.chat.id, f"❌ Akses Ditolak. ID Anda: {message.chat.id} tidak terdaftar sebagai Staff FO.")
         return
@@ -649,8 +654,9 @@ def cek_pembayaran(message):
                      "📝 Melihat Detail Booking Tamu",
                      parse_mode='Markdown', reply_markup=markup)
 
-@bot.message_handler(commands=['date_reservasi'])
+@bot.message_handler(commands=['date_reservasi', 'calendar'])
 def bot_date_reservasi(message):
+    print(f"DEBUG: /date_reservasi accessed by {message.chat.id}")
     if message.chat.id not in STAFF_FO_IDS:
         bot.send_message(message.chat.id, f"❌ Akses Ditolak. ID Anda: {message.chat.id} tidak terdaftar sebagai Staff FO.")
         return
@@ -707,9 +713,12 @@ def cek_booking(message):
             markup = types.InlineKeyboardMarkup()
             
             # Siapkan Link WA
-            clean_phone = ''.join(filter(str.isdigit, str(phone)))
-            if clean_phone.startswith('0'):
-                clean_phone = '62' + clean_phone[1:]
+            has_phone = phone and phone != '-'
+            clean_phone = ''
+            if has_phone:
+                clean_phone = ''.join(filter(str.isdigit, str(phone)))
+                if clean_phone.startswith('0'):
+                    clean_phone = '62' + clean_phone[1:]
             
             # Logic Tombol
             if qris_status != 'sent':
@@ -719,20 +728,7 @@ def cek_booking(message):
                     markup.add(types.InlineKeyboardButton("💬 Chat Tamu (Telegram)", url=f"tg://user?id={guest_chat_id}"))
                 else:
                     # Web User (WhatsApp)
-                    # Note: We need message_id for redirect, but we haven't sent it yet.
-                    # Strategy: Send message FIRST, then update markup? No, that causes the delay/mess.
-                    # Solution: Use a generic redirect endpoint that doesn't need message_id immediately, 
-                    # OR just accept we can't hide the button dynamically without editing.
-                    # BETTER: Just send the direct link to WA without redirect for simplicity and speed.
-                    # Redirect was used to remove the button after clicking. 
-                    # For Vercel speed, let's keep it simple: Direct WA Link.
-                    
-                    # But the requirement was to update the message after clicking.
-                    # Let's try to send message WITH markup. But for the redirect URL we need message_id? 
-                    # Actually, we can use a placeholder or omit message_id in the redirect if possible.
-                    # Or, we just use two steps ONLY for Web users, but optimize Telegram users.
-                    
-                    # For Web users, we will use the simple flow:
+                    # Redirect ke WA Helper
                     markup.add(types.InlineKeyboardButton("📤 Kirim QRIS (WhatsApp)", url=f"{NGROK_URL}/wa_redirect?resi={resi}&id={message.chat.id}&mid=0")) 
                     markup.add(types.InlineKeyboardButton("💬 Chat Tamu (WhatsApp)", url=f"https://wa.me/{clean_phone}"))
             else:
@@ -1397,11 +1393,18 @@ def api_calendar_events():
         if not month or not year:
             return jsonify([])
             
-        month_str = str(month).zfill(2)
-        search_pattern = f"{year}-{month_str}%"
-        
         try:
-            response = supabase.table('bookings').select('tgl, tipe, nama').eq('category', 'reservation').like('tgl', search_pattern).execute()
+            year_int = int(year)
+            month_int = int(month)
+            
+            # Get last day of month
+            last_day = calendar.monthrange(year_int, month_int)[1]
+            
+            start_date = f"{year_int}-{month_int:02d}-01"
+            end_date = f"{year_int}-{month_int:02d}-{last_day}"
+            
+            # Use Range Filter (gte and lte) instead of Like to prevent Cloudflare/Supabase 500 Error
+            response = supabase.table('bookings').select('tgl, tipe, nama').eq('category', 'reservation').gte('tgl', start_date).lte('tgl', end_date).execute()
             rows = response.data
         except Exception as e:
             print(f"Error calendar events db: {e}")
