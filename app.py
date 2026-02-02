@@ -29,25 +29,50 @@ NGROK_URL = 'https://reservasi-hotel-seven.vercel.app'
 # Menambahkan ?sslmode=require untuk keamanan
 DB_URI = "postgresql://postgres:sentraguest%407478@db.relkgipocdukdusakdtv.supabase.co:6543/postgres?sslmode=require"
 
-def get_resolved_db_uri():
+def get_resolved_db_uri_debug():
     """
-    Resolves the database hostname to an IPv4 address to avoid IPv6 issues on Vercel.
+    Resolves the database hostname to an IPv4 address using getaddrinfo to strictly force IPv4.
+    Returns (resolved_uri, debug_info)
     """
+    debug_log = []
     try:
         # Parse URI
         result = urllib.parse.urlparse(DB_URI)
         hostname = result.hostname
+        debug_log.append(f"Original Hostname: {hostname}")
         
-        # Resolve to IPv4
-        ipv4 = socket.gethostbyname(hostname)
+        # Force Resolve to IPv4 using getaddrinfo (AF_INET)
+        # (family, type, proto, canonname, sockaddr)
+        addr_infos = socket.getaddrinfo(hostname, None, family=socket.AF_INET, type=socket.SOCK_STREAM)
+        
+        if not addr_infos:
+             debug_log.append("No IPv4 address found via getaddrinfo.")
+             return DB_URI, "\n".join(debug_log)
+             
+        # Pick the first IPv4 address
+        ipv4 = addr_infos[0][4][0]
+        debug_log.append(f"Resolved IPv4: {ipv4}")
         
         # Reconstruct URI with IPv4
-        netloc = result.netloc.replace(hostname, ipv4)
-        resolved_uri = result._replace(netloc=netloc).geturl()
-        return resolved_uri
+        # Handle netloc replacement carefully
+        new_netloc = result.netloc.replace(hostname, ipv4)
+        resolved_uri = result._replace(netloc=new_netloc).geturl()
+        debug_log.append(f"Final URI (masked): {resolved_uri.replace(ipv4, 'REDACTED_IP')}")
+        
+        return resolved_uri, "\n".join(debug_log)
     except Exception as e:
-        print(f"DNS Resolution failed: {e}")
-        return DB_URI
+        debug_log.append(f"DNS Resolution failed: {e}")
+        return DB_URI, "\n".join(debug_log)
+
+def get_db_connection():
+    try:
+        # Use resolved URI to force IPv4
+        resolved_uri, _ = get_resolved_db_uri_debug()
+        conn = psycopg2.connect(resolved_uri, connect_timeout=10)
+        return conn
+    except Exception as e:
+        print(f"Database connection error: {e}")
+        return None
 
 # KONFIGURASI EMAIL
 GMAIL_USER = 'sentraguest.os@gmail.com'
@@ -83,7 +108,7 @@ def format_guest_name(name):
 def get_db_connection():
     try:
         # Use resolved URI to force IPv4
-        resolved_uri = get_resolved_db_uri()
+        resolved_uri, _ = get_resolved_db_uri_debug()
         conn = psycopg2.connect(resolved_uri, connect_timeout=10)
         return conn
     except Exception as e:
@@ -1567,19 +1592,21 @@ def init_webhook():
 @app.route('/test_db')
 def test_db_route():
     try:
-        resolved_uri = get_resolved_db_uri()
+        resolved_uri, debug_log = get_resolved_db_uri_debug()
         conn = psycopg2.connect(resolved_uri, connect_timeout=10)
         cur = conn.cursor()
         cur.execute("SELECT version()")
         ver = cur.fetchone()
         conn.close()
-        return f"Database Connected! Version: {ver} (Resolved URI used)", 200
+        return f"Database Connected! Version: {ver}<br><br><b>Debug Log:</b><br><pre>{debug_log}</pre>", 200
     except Exception as e:
-        return f"Database Connection Failed: {str(e)}", 500
+        # Re-get debug log if it wasn't captured above (unlikely)
+        _, debug_log = get_resolved_db_uri_debug()
+        return f"Database Connection Failed: {str(e)}<br><br><b>Debug Log:</b><br><pre>{debug_log}</pre>", 500
 
 @app.route('/version')
 def version_route():
-    return "App Version: 1.4 (Force IPv4 Resolution)", 200
+    return "App Version: 1.5 (Strict IPv4 Debug Mode)", 200
 
 if __name__ == '__main__':
     init_db()
