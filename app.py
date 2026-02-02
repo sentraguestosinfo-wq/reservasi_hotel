@@ -1518,11 +1518,11 @@ if __name__ == '__main__':
     # Deteksi Environment Vercel
     if os.environ.get('VERCEL'):
          # Di Vercel, kita tidak jalankan infinity_polling
-         # Kita hanya expose 'app' variable agar Vercel bisa import
          pass
     else:
          # Local Development
-         print(f"Web App running on {NGROK_URL}")
+         # print(f"Web App running on {NGROK_URL}") # Hapus referensi Ngrok
+         print(f"Web App running on Local/Dev")
          
          # Jalankan Flask di Thread terpisah
          t = Thread(target=lambda: app.run(host='0.0.0.0', port=5000, debug=False))
