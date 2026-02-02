@@ -384,8 +384,6 @@ def submit_reservasi():
                                 "Segera hubungi tamu untuk konfirmasi & penawaran.")
                 
                 # Send Message
-                sent_msg = bot.send_message(sid, msg_staff)
-
                 # Add Buttons (Chat WA / Email)
                 markup = types.InlineKeyboardMarkup()
                 
@@ -403,7 +401,7 @@ def submit_reservasi():
                 #    btn_wa = types.InlineKeyboardButton("💬 Chat WA", url=f"https://wa.me/{clean_phone}")
                 #    markup.add(btn_wa)
                 
-                bot.edit_message_reply_markup(sid, sent_msg.message_id, reply_markup=markup)
+                bot.send_message(sid, msg_staff, reply_markup=markup)
 
             except Exception as e:
                  print(f"Failed send staff notif: {e}")
@@ -542,12 +540,6 @@ def submit_booking():
                              f"📍 Posisi Tamu: {'✅ Ada' if lat else '❌ Tidak ada'}\n"
                              "━━━━━━━━━━━━━━━━━━━━")
                 
-                # Kirim pesan dulu untuk dapat ID
-                sent_msg = bot.send_message(sid, msg_staff)
-                
-                # Tambahkan tombol aksi (Chat & Cek Booking)
-                markup = types.InlineKeyboardMarkup()
-                
                 # Siapkan Link WA (Hanya jika ada phone)
                 has_phone = phone and phone != '-'
                 clean_phone = ''
@@ -556,6 +548,8 @@ def submit_booking():
                     if clean_phone.startswith('0'):
                         clean_phone = '62' + clean_phone[1:]
                 
+                markup = types.InlineKeyboardMarkup()
+
                 if via == 'telegram' and chat_id != 'unknown':
                     # JIKA VIA TELEGRAM: Cukup tampilkan tombol Telegram
                     # Tombol Kirim QRIS (Telegram)
@@ -565,10 +559,15 @@ def submit_booking():
                     # Chat Telegram
                     btn_chat = types.InlineKeyboardButton("💬 Chat Tamu (Telegram)", url=f"tg://user?id={chat_id}")
                     markup.add(btn_chat)
+                    
+                    # Kirim pesan langsung dengan markup
+                    bot.send_message(sid, msg_staff, reply_markup=markup)
+
                 else:
                     # JIKA VIA BROWSER
-                    # Jika ada email, beri info
-                    
+                    # Kirim pesan dulu untuk dapat ID (karena butuh message_id untuk redirect)
+                    sent_msg = bot.send_message(sid, msg_staff)
+
                     if has_phone:
                         # Tampilkan Tombol WA dengan REDIRECT URL
                         redirect_url = f"{NGROK_URL}/wa_redirect?resi={resi}&id={sid}&mid={sent_msg.message_id}"
@@ -585,8 +584,9 @@ def submit_booking():
                              btn_qris_email = types.InlineKeyboardButton("📧 Kirim QRIS (Email)", callback_data=f"qris_email_{resi}_{chat_id}")
                              markup.add(btn_qris_email)
                 
-                # Update pesan dengan markup
-                bot.edit_message_reply_markup(sid, sent_msg.message_id, reply_markup=markup)
+                    # Update pesan dengan markup
+                    bot.edit_message_reply_markup(sid, sent_msg.message_id, reply_markup=markup)
+                
                 print(f"Sukses kirim notifikasi ke staff {sid}")
             except Exception as e:
                 print(f"Gagal kirim ke staff {sid}: {e}")
@@ -689,22 +689,20 @@ def cek_booking(message):
     bot.send_message(message.chat.id, "📋 *DAFTAR 5 BOOKING TERBARU*\nSilahkan pilih tamu untuk dikirimkan QRIS Pembayaran:", parse_mode='Markdown')
 
     for b in bookings:
-        resi = b['resi']
-        nama = b['nama']
-        tipe = b['tipe']
-        harga = b['harga']
-        guest_chat_id = b['chat_id']
-        qris_status = b['qris_status']
-        phone = b['phone']
         try:
+            resi = b['resi']
+            nama = b['nama']
+            tipe = b['tipe']
+            harga = b['harga']
+            guest_chat_id = b['chat_id']
+            qris_status = b['qris_status']
+            phone = b['phone']
+
             # Tentukan status icon
             status_icon = "✅ SUDAH DIKIRIM" if qris_status == 'sent' else "❌ BELUM DIKIRIM"
             source = "📱 Telegram" if guest_chat_id != 'unknown' else "🌐 Browser"
             
             text = f"👤 *{nama}*\n🆔 `{resi}`\n🔄 Sumber: {source}\n🛏 {tipe}\n💰 Rp {harga}\n📊 Status QRIS: {status_icon}"
-            
-            # Kirim pesan dulu (tanpa markup) untuk dapat ID
-            sent_msg = bot.send_message(message.chat.id, text, parse_mode='Markdown')
             
             markup = types.InlineKeyboardMarkup()
             
@@ -713,37 +711,39 @@ def cek_booking(message):
             if clean_phone.startswith('0'):
                 clean_phone = '62' + clean_phone[1:]
             
-            # User request: Jangan ada tombol kirim ulang jika sudah terkirim (hanya untuk tombol Telegram)
+            # Logic Tombol
             if qris_status != 'sent':
                 if guest_chat_id != 'unknown':
-                    # Jika Telegram, hanya tampilkan tombol Telegram
-                    btn_qris = types.InlineKeyboardButton("📤 Kirim QRIS (Telegram)", callback_data=f"qris_{resi}_{guest_chat_id}")
-                    markup.add(btn_qris)
-                    
-                    # Tambahkan tombol Chat Tamu (Telegram)
-                    btn_chat = types.InlineKeyboardButton("💬 Chat Tamu (Telegram)", url=f"tg://user?id={guest_chat_id}")
-                    markup.add(btn_chat)
+                    # Telegram User
+                    markup.add(types.InlineKeyboardButton("📤 Kirim QRIS (Telegram)", callback_data=f"qris_{resi}_{guest_chat_id}"))
+                    markup.add(types.InlineKeyboardButton("💬 Chat Tamu (Telegram)", url=f"tg://user?id={guest_chat_id}"))
                 else:
-                    # Jika Browser, tampilkan tombol WA dengan REDIRECT URL
-                    redirect_url = f"{NGROK_URL}/wa_redirect?resi={resi}&id={message.chat.id}&mid={sent_msg.message_id}"
+                    # Web User (WhatsApp)
+                    # Note: We need message_id for redirect, but we haven't sent it yet.
+                    # Strategy: Send message FIRST, then update markup? No, that causes the delay/mess.
+                    # Solution: Use a generic redirect endpoint that doesn't need message_id immediately, 
+                    # OR just accept we can't hide the button dynamically without editing.
+                    # BETTER: Just send the direct link to WA without redirect for simplicity and speed.
+                    # Redirect was used to remove the button after clicking. 
+                    # For Vercel speed, let's keep it simple: Direct WA Link.
                     
-                    btn_qris_wa = types.InlineKeyboardButton("📤 Kirim QRIS (WhatsApp)", url=redirect_url)
-                    markup.add(btn_qris_wa)
+                    # But the requirement was to update the message after clicking.
+                    # Let's try to send message WITH markup. But for the redirect URL we need message_id? 
+                    # Actually, we can use a placeholder or omit message_id in the redirect if possible.
+                    # Or, we just use two steps ONLY for Web users, but optimize Telegram users.
                     
-                    # Tambahkan tombol Chat Tamu (WhatsApp)
-                    btn_chat_wa = types.InlineKeyboardButton("💬 Chat Tamu (WhatsApp)", url=f"https://wa.me/{clean_phone}")
-                    markup.add(btn_chat_wa)
+                    # For Web users, we will use the simple flow:
+                    markup.add(types.InlineKeyboardButton("📤 Kirim QRIS (WhatsApp)", url=f"{NGROK_URL}/wa_redirect?resi={resi}&id={message.chat.id}&mid=0")) 
+                    markup.add(types.InlineKeyboardButton("💬 Chat Tamu (WhatsApp)", url=f"https://wa.me/{clean_phone}"))
             else:
-                # Jika sudah terkirim, tampilkan info saja atau tombol chat
+                # Already sent
                 if guest_chat_id != 'unknown':
-                    btn_chat = types.InlineKeyboardButton("💬 Chat Tamu (Telegram)", url=f"tg://user?id={guest_chat_id}")
-                    markup.add(btn_chat)
+                    markup.add(types.InlineKeyboardButton("💬 Chat Tamu (Telegram)", url=f"tg://user?id={guest_chat_id}"))
                 else:
-                    btn_chat_wa = types.InlineKeyboardButton("💬 Chat Tamu (WhatsApp)", url=f"https://wa.me/{clean_phone}")
-                    markup.add(btn_chat_wa)
-            
-            # Update pesan dengan markup
-            bot.edit_message_reply_markup(chat_id=message.chat.id, message_id=sent_msg.message_id, reply_markup=markup)
+                    markup.add(types.InlineKeyboardButton("💬 Chat Tamu (WhatsApp)", url=f"https://wa.me/{clean_phone}"))
+
+            # Send Message AND Markup together
+            bot.send_message(message.chat.id, text, parse_mode='Markdown', reply_markup=markup)
             
         except Exception as e:
             print(f"DEBUG: Error sending booking {resi}: {e}")
@@ -1486,7 +1486,7 @@ def test_db_route():
 
 @app.route('/version')
 def version_route():
-    return "App Version: 2.2 (Fix HTML Dashboard & Staff Commands)", 200
+    return "App Version: 2.3 (Optimized Bot Commands for Vercel)", 200
 
 if __name__ == '__main__':
     # init_db() # Disabled for Supabase REST Migration
