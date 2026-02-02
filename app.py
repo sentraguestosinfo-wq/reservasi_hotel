@@ -1521,6 +1521,24 @@ def webhook():
     else:
         return 'Invalid payload', 403
 
+@app.route('/init_webhook')
+def init_webhook():
+    """
+    Route khusus untuk inisialisasi Webhook di Vercel.
+    Akses URL ini sekali setelah deploy: https://reservasi-hotel-seven.vercel.app/init_webhook
+    """
+    try:
+        bot.remove_webhook()
+        time.sleep(0.5)
+        
+        # Set webhook ke URL Vercel saat ini
+        webhook_url = f"{NGROK_URL}/webhook"
+        bot.set_webhook(url=webhook_url)
+        
+        return f"Webhook successfully set to: {webhook_url}", 200
+    except Exception as e:
+        return f"Failed to set webhook: {e}", 500
+
 if __name__ == '__main__':
     init_db()
     print("\n\n=======================================================")
