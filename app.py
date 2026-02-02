@@ -17,6 +17,7 @@ from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from email.mime.image import MIMEImage
 import socket  # Added for DNS resolution
+import dns.resolver # Added for Custom DNS resolution
 
 # --- KONFIGURASI ---
 # GANTI DENGAN TOKEN BOT ANDA
@@ -31,7 +32,8 @@ DB_URI = "postgresql://postgres:sentraguest%407478@db.relkgipocdukdusakdtv.supab
 
 def get_resolved_db_uri_debug():
     """
-    Resolves the database hostname to an IPv4 address using getaddrinfo to strictly force IPv4.
+    Resolves the database hostname to an IPv4 address using Google DNS (8.8.8.8) 
+    to bypass local/Vercel DNS issues.
     Returns (resolved_uri, debug_info)
     """
     debug_log = []
@@ -39,29 +41,46 @@ def get_resolved_db_uri_debug():
         # Parse URI
         result = urllib.parse.urlparse(DB_URI)
         hostname = result.hostname
-        debug_log.append(f"Original Hostname: {hostname}")
+        debug_log.append(f"Target Hostname: {hostname}")
         
-        # Force Resolve to IPv4 using getaddrinfo (AF_INET)
-        # (family, type, proto, canonname, sockaddr)
+        # 1. Try Custom DNS (Google DNS)
+        try:
+            resolver = dns.resolver.Resolver()
+            resolver.nameservers = ['8.8.8.8', '8.8.4.4']
+            answers = resolver.resolve(hostname, 'A')
+            
+            ipv4_list = [r.to_text() for r in answers]
+            debug_log.append(f"Google DNS returned A records: {ipv4_list}")
+            
+            if ipv4_list:
+                ipv4 = ipv4_list[0]
+                debug_log.append(f"Using Google DNS IPv4: {ipv4}")
+                
+                # Reconstruct URI
+                new_netloc = result.netloc.replace(hostname, ipv4)
+                resolved_uri = result._replace(netloc=new_netloc).geturl()
+                return resolved_uri, "\n".join(debug_log)
+                
+        except Exception as dns_e:
+            debug_log.append(f"Google DNS lookup failed: {dns_e}")
+
+        # 2. Fallback to System DNS (getaddrinfo)
+        debug_log.append("Falling back to System DNS...")
         addr_infos = socket.getaddrinfo(hostname, None, family=socket.AF_INET, type=socket.SOCK_STREAM)
         
         if not addr_infos:
-             debug_log.append("No IPv4 address found via getaddrinfo.")
+             debug_log.append("System DNS: No IPv4 address found.")
              return DB_URI, "\n".join(debug_log)
              
-        # Pick the first IPv4 address
         ipv4 = addr_infos[0][4][0]
-        debug_log.append(f"Resolved IPv4: {ipv4}")
+        debug_log.append(f"System DNS IPv4: {ipv4}")
         
-        # Reconstruct URI with IPv4
-        # Handle netloc replacement carefully
         new_netloc = result.netloc.replace(hostname, ipv4)
         resolved_uri = result._replace(netloc=new_netloc).geturl()
-        debug_log.append(f"Final URI (masked): {resolved_uri.replace(ipv4, 'REDACTED_IP')}")
-        
         return resolved_uri, "\n".join(debug_log)
+
     except Exception as e:
-        debug_log.append(f"DNS Resolution failed: {e}")
+        debug_log.append(f"Resolution process failed: {e}")
         return DB_URI, "\n".join(debug_log)
 
 def get_db_connection():
@@ -1606,7 +1625,7 @@ def test_db_route():
 
 @app.route('/version')
 def version_route():
-    return "App Version: 1.5 (Strict IPv4 Debug Mode)", 200
+    return "App Version: 1.6 (Google DNS Bypass)", 200
 
 if __name__ == '__main__':
     init_db()
