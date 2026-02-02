@@ -1,0 +1,14 @@
+venv/
+__pycache__/
+*.pyc
+.env
+.DS_Store
+*.db
+# Kecuali jika user ingin database awal ikut ter-upload, tapi biasanya tidak disarankan.
+# Namun untuk Vercel, jika tidak ada DB, app mungkin crash saat start jika tidak handle missing DB.
+# app.py init_db() seems to handle creation if missing.
+# So safe to ignore *.db. But wait, user might want to keep their current data?
+# No, migrating usually means starting fresh or manual import. 
+# But let's ignore it to keep repo clean.
+mercure_nexa.db
+static/mercure_nexa.db

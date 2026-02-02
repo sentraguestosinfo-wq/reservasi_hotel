@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Staff Dashboard - Mercure Nexa</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        :root {
+            --primary: #512D6D;
+            --secondary: #9C7C38;
+            --bg-light: #F8F9FA;
+            --text-dark: #333;
+        }
+        body {
+            font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+            margin: 0;
+            background-color: var(--bg-light);
+            color: var(--text-dark);
+        }
+        .header {
+            background: var(--primary);
+            color: white;
+            padding: 15px 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+        .header h2 { margin: 0; font-size: 18px; }
+        .container { padding: 20px; max-width: 800px; margin: 0 auto; }
+        
+        .card {
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+            margin-bottom: 15px;
+            overflow: hidden;
+            border-left: 5px solid #ccc;
+        }
+        .card.pending { border-left-color: #ffc107; }
+        .card.paid { border-left-color: #28a745; }
+        .card.cancelled { border-left-color: #dc3545; }
+        
+        .card-header {
+            padding: 15px;
+            background: #fff;
+            border-bottom: 1px solid #eee;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .resi { font-weight: bold; color: var(--primary); }
+        .status-badge {
+            padding: 5px 10px;
+            border-radius: 15px;
+            font-size: 11px;
+            font-weight: bold;
+            color: white;
+            text-transform: uppercase;
+        }
+        .bg-pending { background: #ffc107; color: #333; }
+        .bg-paid { background: #28a745; }
+        .bg-cancelled { background: #dc3545; }
+        
+        .card-body { padding: 15px; font-size: 13px; color: #555; }
+        .row { display: flex; justify-content: space-between; margin-bottom: 5px; }
+        .label { font-weight: bold; color: #777; }
+        
+        .actions {
+            padding: 10px 15px;
+            background: #f9f9f9;
+            display: flex;
+            gap: 10px;
+            justify-content: flex-end;
+        }
+        .btn {
+            border: none;
+            padding: 8px 12px;
+            border-radius: 5px;
+            font-size: 12px;
+            cursor: pointer;
+            color: white;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+        .btn-success { background: #28a745; }
+        .btn-danger { background: #dc3545; }
+        .btn-warning { background: #ffc107; color: #333; }
+        
+        /* Filter Tabs */
+        .tabs { display: flex; gap: 10px; margin-bottom: 20px; overflow-x: auto; padding-bottom: 5px; }
+        .tab {
+            padding: 8px 15px;
+            background: white;
+            border-radius: 20px;
+            font-size: 13px;
+            color: #777;
+            cursor: pointer;
+            border: 1px solid #ddd;
+            white-space: nowrap;
+        }
+        .tab.active { background: var(--primary); color: white; border-color: var(--primary); }
+        
+        .loading { text-align: center; padding: 20px; color: #999; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h2>{{ dashboard_title if dashboard_title else 'Staff Dashboard' }}</h2>
+        <button onclick="loadBookings()" style="background:none; border:none; color:white; font-size:18px; cursor:pointer;"><i class="fas fa-sync-alt"></i></button>
+    </div>
+    
+    <div class="container">
+        {% if mode == 'reservasi' %}
+        <div class="tabs">
+            <div class="tab active" onclick="filter('confirmed', this)">Confirm</div>
+            <div class="tab" onclick="filter('cancelled', this)">Cancel</div>
+        </div>
+        {% else %}
+        <div class="tabs">
+            <div class="tab active" onclick="filter('all', this)">All</div>
+            <div class="tab" onclick="filter('pending', this)">Pending</div>
+            <div class="tab" onclick="filter('paid', this)">Paid</div>
+            <div class="tab" onclick="filter('cancelled', this)">Cancelled</div>
+        </div>
+        {% endif %}
+        
+        <div id="bookingList">
+            <div class="loading"><i class="fas fa-spinner fa-spin"></i> Memuat data...</div>
+        </div>
+    </div>
+
+    <script>
+        let allBookings = [];
+        let currentFilter = '{{ "" if mode == "reservasi" else "all" }}';
+        const MODE = "{{ mode if mode else 'booking' }}";
+
+        function loadBookings() {
+            document.getElementById('bookingList').innerHTML = '<div class="loading"><i class="fas fa-spinner fa-spin"></i> Memuat data...</div>';
+            
+            const API_ENDPOINT = "{{ api_endpoint if api_endpoint else '/staff/api/bookings' }}";
+            fetch(API_ENDPOINT)
+                .then(res => {
+                    if (!res.ok) {
+                        return res.text().then(text => { throw new Error(text) });
+                    }
+                    return res.json();
+                })
+                .then(data => {
+                    if (data.error) {
+                        throw new Error(data.error);
+                    }
+                    allBookings = data;
+                    renderBookings();
+                })
+                .catch(err => {
+                    console.error(err);
+                    document.getElementById('bookingList').innerHTML = '<div class="loading" style="color:red">Gagal memuat data: ' + err.message + '</div>';
+                });
+        }
+
+        function filter(status, el) {
+            currentFilter = status;
+            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+            el.classList.add('active');
+            renderBookings();
+        }
+
+        function renderBookings() {
+            const list = document.getElementById('bookingList');
+            list.innerHTML = '';
+            
+            let filtered = [];
+            if (MODE === 'reservasi') {
+                // Default: tampilkan semua (reserved, confirmed, cancelled)
+                if (!currentFilter) {
+                    filtered = allBookings;
+                } else {
+                    filtered = allBookings.filter(b => b.status === currentFilter);
+                }
+            } else {
+                filtered = allBookings.filter(b => currentFilter === 'all' || b.status === currentFilter);
+            }
+            
+            if(filtered.length === 0) {
+                list.innerHTML = '<div class="loading">Tidak ada data.</div>';
+                return;
+            }
+            
+            filtered.forEach(b => {
+                const statusClass = (function(s) {
+                    if (MODE === 'reservasi') {
+                        if (s === 'confirmed') return 'bg-paid';
+                        if (s === 'cancelled') return 'bg-cancelled';
+                        return 'bg-pending';
+                    } else {
+                        return s === 'paid' ? 'bg-paid' : (s === 'cancelled' ? 'bg-cancelled' : 'bg-pending');
+                    }
+                })(b.status);
+                const cardClass = (function(s) {
+                    if (MODE === 'reservasi') {
+                        if (s === 'confirmed') return 'paid';
+                        if (s === 'cancelled') return 'cancelled';
+                        return 'pending';
+                    } else {
+                        return s === 'paid' ? 'paid' : (s === 'cancelled' ? 'cancelled' : 'pending');
+                    }
+                })(b.status);
+                
+                let actions = '';
+
+                // Chat Buttons
+                if (b.email && b.email !== '-') {
+                     actions += `<a href="mailto:${b.email}" class="btn" style="background:#17a2b8; text-decoration:none;"><i class="fas fa-envelope"></i> Email</a> `;
+                }
+                if (b.chat_id && b.chat_id !== 'unknown') {
+                     actions += `<a href="tg://user?id=${b.chat_id}" class="btn" style="background:#0088cc; text-decoration:none;"><i class="fab fa-telegram"></i> Telegram</a> `;
+                }
+
+                if (MODE === 'reservasi') {
+                    // Tambahkan tombol Confirm & Cancel selalu tampil
+                    actions += `
+                        <button class="btn btn-success" onclick="updateStatus('${b.resi}', 'confirmed')"><i class="fas fa-check"></i> Confirm</button>
+                        <button class="btn btn-danger" onclick="updateStatus('${b.resi}', 'cancelled')"><i class="fas fa-times"></i> Cancel</button>
+                    `;
+                } else {
+                    if(b.status === 'pending') {
+                        actions += `
+                            <button class="btn btn-success" onclick="updateStatus('${b.resi}', 'paid')"><i class="fas fa-check"></i> Paid</button>
+                            <button class="btn btn-danger" onclick="updateStatus('${b.resi}', 'cancelled')"><i class="fas fa-times"></i> Cancel</button>
+                        `;
+                    } else if (b.status === 'paid') {
+                         actions += `
+                            <button class="btn btn-danger" onclick="updateStatus('${b.resi}', 'cancelled')"><i class="fas fa-times"></i> Cancel</button>
+                        `;
+                    }
+                }
+                
+                const html = `
+                    <div class="card ${cardClass}">
+                        <div class="card-header">
+                            <span class="resi">#${b.resi}</span>
+                            <span class="status-badge ${statusClass}">${MODE === 'reservasi' ? (b.status === 'confirmed' ? 'confirm' : (b.status === 'cancelled' ? 'cancel' : 'reserved')) : b.status}</span>
+                        </div>
+                        <div class="card-body">
+                            <div class="row"><span class="label">Nama:</span> <span>${b.nama}</span></div>
+                            <div class="row"><span class="label">Tgl Booking:</span> <span>${b.tgl}</span></div>
+                            <div class="row"><span class="label">Kamar:</span> <span>${b.tipe} (${b.jml_kamar})</span></div>
+                            <div class="row"><span class="label">Pax:</span> <span>${b.orang || '-'}</span></div>
+                            <div class="row"><span class="label">Jam Booking:</span> <span>${b.jam_booking || '-'}</span></div>
+                            <div class="row"><span class="label">Total:</span> <span>Rp ${b.harga}</span></div>
+                            <div class="row"><span class="label">Email:</span> <span>${b.email || '-'}</span></div>
+                            <div class="row"><span class="label">Via:</span> <span>${b.via}</span></div>
+                        </div>
+                        <div class="actions">
+                            ${actions}
+                        </div>
+                    </div>
+                `;
+                list.innerHTML += html;
+            });
+        }
+        
+        function updateStatus(resi, newStatus) {
+            if(!confirm(`Ubah status booking ${resi} menjadi ${newStatus}?`)) return;
+            
+            fetch('/staff/api/update_status', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ resi: resi, status: newStatus })
+            })
+            .then(res => res.json())
+            .then(data => {
+                if(data.status === 'success') {
+                    loadBookings();
+                } else {
+                    alert('Gagal update: ' + data.message);
+                }
+            })
+            .catch(err => alert('Error: ' + err));
+        }
+        
+        // Load on start
+        loadBookings();
+    </script>
+</body>
+</html>

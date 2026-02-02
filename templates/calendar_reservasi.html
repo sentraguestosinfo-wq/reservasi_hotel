@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Calender Reservasi - Nexa Hotel</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <style>
+        body {
+            background-color: #f4f6f9;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        .container {
+            max-width: 1000px;
+            margin-top: 10px;
+            margin-bottom: 20px;
+            padding: 0 10px;
+        }
+        .card {
+            border: none;
+            border-radius: 15px;
+            box-shadow: 0 0 20px rgba(0,0,0,0.05);
+            overflow: hidden;
+        }
+        .card-header {
+            background-color: #fff;
+            border-bottom: 1px solid #eee;
+            padding: 12px 14px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .card-header h2 {
+            margin: 0;
+            color: #333;
+            font-weight: 600;
+            font-size: 1.5rem;
+        }
+        .controls {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+        .controls select, .controls input {
+            height: 30px;
+        }
+        .btn-close-telegram {
+            border: none;
+            background: transparent;
+            font-size: 20px;
+            line-height: 20px;
+            color: #666;
+        }
+        .btn-close-telegram:active {
+            transform: scale(0.95);
+        }
+        .calendar-grid {
+            display: grid;
+            grid-template-columns: repeat(7, 1fr);
+            gap: 1px;
+            background-color: #eee;
+            border: 1px solid #eee;
+        }
+        .calendar-day-header {
+            background-color: #f8f9fa;
+            color: #666;
+            font-weight: 600;
+            text-align: center;
+            padding: 15px 0;
+            font-size: 0.9rem;
+        }
+        .calendar-day {
+            background-color: #fff;
+            min-height: 90px;
+            padding: 8px;
+            position: relative;
+            transition: all 0.2s;
+        }
+        .calendar-day:hover {
+            background-color: #fcfcfc;
+        }
+        .day-number {
+            font-weight: 600;
+            color: #444;
+            margin-bottom: 5px;
+            display: block;
+        }
+        .event-badge {
+            display: block;
+            height: 8px;
+            margin-bottom: 4px;
+            border-radius: 4px;
+        }
+        .event-meeting {
+            background-color: #0d6efd; /* Blue */
+        }
+        .event-wedding {
+            background-color: #dc3545; /* Red */
+        }
+        .event-birthday, .event-other {
+            background-color: #198754; /* Green */
+        }
+        .today {
+            background-color: #e8f4ff;
+        }
+        .empty-day {
+            background-color: #f9f9f9;
+        }
+        .legend {
+            display: flex;
+            gap: 15px;
+            margin-top: 12px;
+            justify-content: center;
+        }
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            font-size: 0.9rem;
+            color: #666;
+        }
+        .legend-color {
+            width: 15px;
+            height: 15px;
+            border-radius: 3px;
+        }
+        @media (max-width: 576px) {
+            .card-header h2 {
+                font-size: 1.1rem;
+            }
+            .calendar-day {
+                min-height: 72px;
+                padding: 6px;
+            }
+            .day-number {
+                font-size: 0.95rem;
+            }
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <div class="card">
+        <div class="card-header">
+            <h2 id="calendarTitle"><i class="fas fa-calendar-alt text-primary me-2"></i>Calender Reservasi</h2>
+            <div class="controls">
+                <select id="monthSelect" class="form-select form-select-sm" style="width: 110px;" onchange="loadCalendar()">
+                    <option value="0">Januari</option>
+                    <option value="1">Februari</option>
+                    <option value="2">Maret</option>
+                    <option value="3">April</option>
+                    <option value="4">Mei</option>
+                    <option value="5">Juni</option>
+                    <option value="6">Juli</option>
+                    <option value="7">Agustus</option>
+                    <option value="8">September</option>
+                    <option value="9">Oktober</option>
+                    <option value="10">November</option>
+                    <option value="11">Desember</option>
+                </select>
+                <input type="number" id="yearInput" class="form-control form-control-sm" style="width: 90px;" value="2026" onchange="loadCalendar()">
+                <button class="btn-close-telegram" aria-label="Close" onclick="goBackToTelegram()"><i class="fas fa-times"></i></button>
+            </div>
+        </div>
+        <div class="card-body p-0">
+            <div class="calendar-grid">
+                <div class="calendar-day-header">Minggu</div>
+                <div class="calendar-day-header">Senin</div>
+                <div class="calendar-day-header">Selasa</div>
+                <div class="calendar-day-header">Rabu</div>
+                <div class="calendar-day-header">Kamis</div>
+                <div class="calendar-day-header">Jumat</div>
+                <div class="calendar-day-header">Sabtu</div>
+                <!-- Days will be generated here -->
+            </div>
+            <div id="calendarBody" class="calendar-grid" style="border-top: none; margin-top: -1px;">
+                <!-- JS will populate this -->
+            </div>
+        </div>
+        <div class="card-footer bg-white border-top-0 pb-4">
+            <div class="legend">
+                <div class="legend-item">
+                    <div class="legend-color event-meeting"></div> Meeting
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color event-wedding"></div> Wedding
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color event-birthday"></div> Birthday/Other
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+    const monthSelect = document.getElementById('monthSelect');
+    const yearInput = document.getElementById('yearInput');
+    const calendarBody = document.getElementById('calendarBody');
+    function goBackToTelegram() {
+        try {
+            if (window.Telegram && window.Telegram.WebApp && typeof window.Telegram.WebApp.close === 'function') {
+                window.Telegram.WebApp.close();
+                return;
+            }
+        } catch (e) {}
+        if (document.referrer && (document.referrer.includes('t.me') || document.referrer.includes('telegram'))) {
+            history.back();
+            return;
+        }
+        window.close();
+    }
+
+    // Set default date to current date
+    const today = new Date();
+    monthSelect.value = today.getMonth();
+    yearInput.value = today.getFullYear();
+
+    async function loadCalendar() {
+        const month = parseInt(monthSelect.value);
+        let year = parseInt(yearInput.value);
+        
+        // Safety check for year
+        if (isNaN(year) || year < 1900 || year > 2100) {
+            year = new Date().getFullYear();
+            yearInput.value = year;
+        }
+
+        // Update Title
+        const monthNames = ["Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli", "Agustus", "September", "Oktober", "November", "Desember"];
+        document.getElementById('calendarTitle').innerHTML = `<i class="fas fa-calendar-alt text-primary me-2"></i>${monthNames[month]} ${year}`;
+
+        // Fetch events
+        let events = [];
+        try {
+            // Add timestamp to prevent caching
+            const response = await fetch(`/api/calendar_events?month=${month + 1}&year=${year}&_=${new Date().getTime()}`);
+            if (response.ok) {
+                events = await response.json();
+            }
+        } catch (error) {
+            console.error('Failed to fetch events:', error);
+        }
+
+        renderCalendar(month, year, events);
+    }
+
+    function renderCalendar(month, year, events) {
+        calendarBody.innerHTML = '';
+        
+        const getDaysInMonthUTC = (m, y) => {
+            return new Date(Date.UTC(y, m + 1, 0)).getUTCDate();
+        };
+        const firstDay = new Date(Date.UTC(year, month, 1)).getUTCDay();
+        const daysInMonth = getDaysInMonthUTC(month, year);
+
+        // Add empty cells for days before start of month
+        for (let i = 0; i < firstDay; i++) {
+            const emptyCell = document.createElement('div');
+            emptyCell.className = 'calendar-day empty-day';
+            calendarBody.appendChild(emptyCell);
+        }
+
+        // Add days
+        for (let day = 1; day <= daysInMonth; day++) {
+            const cell = document.createElement('div');
+            cell.className = 'calendar-day';
+            
+            const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+            
+            const now = new Date();
+            if (day === now.getDate() && month === now.getMonth() && year === now.getFullYear()) {
+                cell.classList.add('today');
+            }
+
+            const dayNum = document.createElement('span');
+            dayNum.className = 'day-number';
+            dayNum.textContent = day;
+            cell.appendChild(dayNum);
+
+            const dayEvents = events.filter(e => e.tgl === dateStr);
+            dayEvents.forEach(event => {
+                const badge = document.createElement('div');
+                let typeClass = 'event-other';
+                const typeLower = (event.tipe || '').toLowerCase();
+                
+                if (typeLower.includes('meeting')) {
+                    typeClass = 'event-meeting';
+                } else if (typeLower.includes('wedding')) {
+                    typeClass = 'event-wedding';
+                } else if (typeLower.includes('birthday') || typeLower.includes('ulang tahun')) {
+                    typeClass = 'event-birthday';
+                }
+                
+                badge.className = `event-badge ${typeClass}`;
+                cell.appendChild(badge);
+            });
+
+            calendarBody.appendChild(cell);
+        }
+        
+        // Add empty cells to complete the grid row if needed
+        const totalCells = firstDay + daysInMonth;
+        const remainingCells = 7 - (totalCells % 7);
+        if (remainingCells < 7) {
+            for (let i = 0; i < remainingCells; i++) {
+                const emptyCell = document.createElement('div');
+                emptyCell.className = 'calendar-day empty-day';
+                calendarBody.appendChild(emptyCell);
+            }
+        }
+    }
+
+    // Initial load
+    loadCalendar();
+</script>
+
+</body>
+</html>

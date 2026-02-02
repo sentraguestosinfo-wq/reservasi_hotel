@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Form Reservasi - Mercure Nexa</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        :root {
+            --primary: #512D6D;
+            --secondary: #9C7C38;
+            --bg-light: #F8F9FA;
+            --text-dark: #333;
+        }
+        body {
+            font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+            margin: 0;
+            background-color: var(--bg-light);
+            color: var(--text-dark);
+        }
+        .header {
+            background: linear-gradient(135deg, var(--primary) 0%, #3a1c52 100%);
+            padding: 20px;
+            text-align: center;
+            color: white;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.15);
+        }
+        .header h2 { margin: 0; font-size: 18px; text-transform: uppercase; letter-spacing: 1px; }
+        .container { padding: 20px; max-width: 600px; margin: 0 auto; }
+        
+        .card {
+            background: white;
+            border-radius: 15px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.05);
+            padding: 25px;
+            margin-bottom: 20px;
+        }
+        .form-group { margin-bottom: 20px; }
+        label { display: block; margin-bottom: 8px; font-weight: bold; color: var(--primary); font-size: 13px; text-transform: uppercase; }
+        input, select {
+            width: 100%; padding: 12px;
+            border: 1px solid #ddd; border-radius: 8px;
+            font-size: 15px; box-sizing: border-box;
+        }
+        input:focus, select:focus { border-color: var(--primary); outline: none; }
+        
+        .btn-submit {
+            background: var(--primary); color: white;
+            width: 100%; padding: 15px; border: none;
+            border-radius: 25px; font-size: 16px; font-weight: bold;
+            cursor: pointer; transition: background 0.3s;
+            display: flex; justify-content: center; align-items: center; gap: 10px;
+        }
+        .btn-submit:hover { background: #3a1c52; }
+        .btn-submit:disabled { background: #ccc; cursor: not-allowed; }
+        
+        .info-box {
+            background: #e8f4fd; border-left: 4px solid #2196F3;
+            padding: 15px; border-radius: 5px; font-size: 13px;
+            margin-bottom: 20px; color: #0d47a1;
+        }
+        
+        .back-link {
+            display: block; text-align: center; margin-top: 20px;
+            color: #777; text-decoration: none; font-size: 14px;
+        }
+
+        /* Dynamic Fields Animation */
+        .dynamic-field { display: none; animation: fadeIn 0.3s; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(-10px); } to { opacity: 1; transform: translateY(0); } }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h2>Form Reservasi & Inquiry</h2>
+        <p style="margin:5px 0 0; font-size:12px; opacity:0.8;">Mercure Bandung Nexa Supratman</p>
+    </div>
+
+    <div class="container">
+        <div class="info-box">
+            <i class="fas fa-info-circle"></i> <strong>Info:</strong><br>
+            Silakan isi form di bawah ini untuk permintaan reservasi atau penawaran harga. Staff kami akan segera menghubungi Anda.
+        </div>
+
+        <div class="card">
+            <form id="reservasiForm">
+                <!-- Data Diri -->
+                <div class="form-group">
+                    <label>Nama PIC (Person in Charge)</label>
+                    <input type="text" id="nama" required placeholder="Nama Lengkap Anda">
+                </div>
+                
+                <div class="form-group">
+                    <label>Email</label>
+                    <input type="email" id="email" required placeholder="contoh@email.com">
+                </div>
+
+                <div class="form-group">
+                    <label>No. HP / WhatsApp</label>
+                    <input type="tel" id="phone" required placeholder="08xxxxxxxxxx">
+                </div>
+
+                <!-- Jenis Reservasi -->
+                <div class="form-group">
+                    <label>Jenis Kebutuhan</label>
+                    <select id="jenis" onchange="updateForm()" required>
+                        <option value="" disabled selected>-- Pilih Jenis --</option>
+                        <option value="Kamar">Pesan Kamar (Room)</option>
+                        <option value="Meeting">Meeting Package</option>
+                        <option value="Wedding">Wedding Package</option>
+                        <option value="Birthday">Birthday / Other</option>
+                    </select>
+                </div>
+                
+                <div class="form-group">
+                    <label id="label-tgl">Tanggal Acara / Menginap</label>
+                    <input type="date" id="tgl" required>
+                </div>
+
+                <!-- Dynamic Fields -->
+                <div id="field-kamar" class="dynamic-field">
+                    <div class="form-group">
+                        <label>Jumlah Kamar</label>
+                        <input type="number" id="jml_kamar" min="1" placeholder="Berapa kamar?">
+                    </div>
+                </div>
+
+                <div id="field-pax" class="dynamic-field">
+                    <div class="form-group">
+                        <label>Jumlah Peserta (Pax)</label>
+                        <input type="number" id="jml_pax" min="1" placeholder="Estimasi jumlah orang">
+                    </div>
+                </div>
+
+                <div id="field-wedding-kamar" class="dynamic-field">
+                    <div class="form-group">
+                        <label>Kebutuhan Kamar (Untuk Wedding)</label>
+                        <input type="number" id="jml_kamar_wedding" min="0" placeholder="Jumlah kamar (jika ada)">
+                        <small style="color:#777;">Kosongkan jika tidak butuh kamar</small>
+                    </div>
+                </div>
+
+                <button type="submit" class="btn-submit" id="btnSubmit">
+                    <i class="fas fa-paper-plane"></i> KIRIM PERMINTAAN
+                </button>
+            </form>
+        </div>
+        
+        <a href="/" class="back-link"><i class="fas fa-arrow-left"></i> Kembali ke Menu Utama</a>
+    </div>
+
+    <script>
+        // Set Min Date to Tomorrow
+        const dateInput = document.getElementById('tgl');
+        const tomorrow = new Date();
+        tomorrow.setDate(tomorrow.getDate() + 1);
+        dateInput.min = tomorrow.toISOString().split('T')[0];
+
+        function updateForm() {
+            const jenis = document.getElementById('jenis').value;
+            const fieldKamar = document.getElementById('field-kamar');
+            const fieldPax = document.getElementById('field-pax');
+            const fieldWeddingKamar = document.getElementById('field-wedding-kamar');
+            const labelTgl = document.getElementById('label-tgl');
+            
+            // Reset
+            fieldKamar.style.display = 'none';
+            fieldPax.style.display = 'none';
+            fieldWeddingKamar.style.display = 'none';
+            
+            // Required Attributes Management
+            document.getElementById('jml_kamar').required = false;
+            document.getElementById('jml_pax').required = false;
+            
+            if (jenis === 'Kamar') {
+                fieldKamar.style.display = 'block';
+                document.getElementById('jml_kamar').required = true;
+                labelTgl.innerText = "Tanggal Check-in";
+            } else if (jenis === 'Meeting' || jenis === 'Birthday') {
+                fieldPax.style.display = 'block';
+                document.getElementById('jml_pax').required = true;
+                labelTgl.innerText = "Tanggal Acara";
+            } else if (jenis === 'Wedding') {
+                fieldPax.style.display = 'block';
+                fieldWeddingKamar.style.display = 'block';
+                document.getElementById('jml_pax').required = true;
+                labelTgl.innerText = "Tanggal Resepsi / Acara";
+            } else {
+                labelTgl.innerText = "Tanggal Acara / Menginap";
+            }
+        }
+
+        document.getElementById('reservasiForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            const btn = document.getElementById('btnSubmit');
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> MENGIRIM...';
+            btn.disabled = true;
+
+            const jenis = document.getElementById('jenis').value;
+            let jml_kamar = 0;
+            let jml_pax = 0;
+
+            if (jenis === 'Kamar') {
+                jml_kamar = document.getElementById('jml_kamar').value;
+            } else if (jenis === 'Meeting' || jenis === 'Birthday') {
+                jml_pax = document.getElementById('jml_pax').value;
+            } else if (jenis === 'Wedding') {
+                jml_pax = document.getElementById('jml_pax').value;
+                jml_kamar = document.getElementById('jml_kamar_wedding').value || 0;
+            }
+
+            const data = {
+                nama: document.getElementById('nama').value,
+                phone: document.getElementById('phone').value,
+                email: document.getElementById('email').value,
+                tgl: document.getElementById('tgl').value,
+                tipe: jenis,
+                jml_kamar: jml_kamar,
+                orang: jml_pax,
+                total_harga: 0 // Inquiry
+            };
+
+            fetch('/submit_reservasi', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(data)
+            })
+            .then(res => res.json())
+            .then(data => {
+                if(data.status === 'success') {
+                    alert('Permintaan Anda berhasil dikirim! Staff kami akan menghubungi Anda segera.');
+                    window.location.href = '/';
+                } else {
+                    alert('Gagal mengirim: ' + data.message);
+                    btn.innerHTML = '<i class="fas fa-paper-plane"></i> KIRIM PERMINTAAN';
+                    btn.disabled = false;
+                }
+            })
+            .catch(err => {
+                alert('Terjadi kesalahan sistem.');
+                btn.innerHTML = '<i class="fas fa-paper-plane"></i> KIRIM PERMINTAAN';
+                btn.disabled = false;
+            });
+        });
+    </script>
+</body>
+</html>

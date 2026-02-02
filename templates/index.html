@@ -1,0 +1,872 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mercure Bandung Nexa Supratman</title>
+    
+    <!-- PWA Settings -->
+    <link rel="manifest" href="{{ url_for('static', filename='manifest.json') }}">
+    <link rel="apple-touch-icon" href="{{ url_for('static', filename='logo.png') }}">
+    <meta name="theme-color" content="#512D6D">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        :root {
+            --primary: #512D6D; /* Mercure Purple */
+            --secondary: #9C7C38; /* Gold Accent */
+            --bg-light: #F8F9FA;
+            --text-dark: #333;
+        }
+        body {
+            font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+            margin: 0;
+            background-color: var(--bg-light);
+            color: var(--text-dark);
+            -webkit-tap-highlight-color: transparent;
+            padding-bottom: 80px; /* Space for bottom nav if needed */
+        }
+        
+        /* Language Switcher */
+        .lang-switch {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            z-index: 200;
+            background: rgba(255,255,255,0.2);
+            padding: 5px;
+            border-radius: 20px;
+            display: flex;
+            gap: 5px;
+            border: 1px solid rgba(255,255,255,0.3);
+        }
+        .lang-btn {
+            background: none;
+            border: none;
+            color: rgba(255,255,255,0.7);
+            font-size: 12px;
+            font-weight: bold;
+            padding: 5px 10px;
+            cursor: pointer;
+            border-radius: 15px;
+            transition: all 0.3s;
+        }
+        .lang-btn.active {
+            background: white;
+            color: var(--primary);
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        .header {
+            background: linear-gradient(135deg, var(--primary) 0%, #3a1c52 100%);
+            padding: 30px 20px;
+            text-align: center;
+            color: white;
+            border-bottom: 4px solid var(--secondary);
+            box-shadow: 0 4px 10px rgba(0,0,0,0.15);
+            position: relative;
+        }
+        .header img {
+            height: 60px;
+            margin-bottom: 10px;
+            filter: drop-shadow(0 2px 4px rgba(0,0,0,0.2));
+        }
+        .header h2 { margin: 5px 0 0; font-size: 16px; font-weight: 400; letter-spacing: 2px; text-transform: uppercase; }
+        .header p { margin: 2px 0 0; font-size: 11px; opacity: 0.8; letter-spacing: 1px; }
+
+        /* Navigation */
+        .nav-tabs {
+            display: flex;
+            background: white;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            overflow-x: auto;
+            padding: 0 5px;
+        }
+        .nav-item {
+            flex: 1;
+            text-align: center;
+            padding: 15px 5px;
+            font-size: 11px;
+            font-weight: 600;
+            color: #999;
+            cursor: pointer;
+            border-bottom: 3px solid transparent;
+            white-space: nowrap;
+            transition: all 0.3s;
+            text-transform: uppercase;
+        }
+        .nav-item.active {
+            color: var(--primary);
+            border-bottom: 3px solid var(--secondary);
+        }
+        .nav-item i { display: block; font-size: 18px; margin-bottom: 6px; color: inherit; }
+
+        /* Content Sections */
+        .section { display: none; padding: 20px; animation: fadeIn 0.4s ease-out; }
+        .section.active { display: block; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+
+        /* Cards */
+        .card {
+            background: white;
+            border-radius: 16px;
+            overflow: hidden;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.05);
+            margin-bottom: 25px;
+            border: none;
+            transition: transform 0.2s;
+        }
+        .card:active { transform: scale(0.99); }
+        .card img { width: 100%; height: 200px; object-fit: cover; }
+        .card-body { padding: 20px; }
+        .card-title { font-size: 18px; font-weight: bold; color: var(--primary); margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center; }
+        .card-desc { font-size: 14px; color: #555; line-height: 1.6; margin-bottom: 15px; }
+        .price { color: var(--secondary); font-weight: bold; font-size: 16px; }
+        
+        /* Buttons */
+        .btn-reservasi {
+            background: white;
+            color: var(--primary); 
+            border: 2px solid var(--primary);
+            padding: 12px 20px;
+            border-radius: 25px; font-size: 13px; font-weight: 600;
+            cursor: pointer; text-decoration: none; display: block;
+            text-align: center; width: 100%; box-sizing: border-box;
+            margin-top: 10px;
+            transition: all 0.2s;
+        }
+        .btn-reservasi:hover { background: #f0e6f5; }
+        
+        .btn-primary {
+            background: linear-gradient(to right, var(--primary), #6a3d8a);
+            color: white; border: none; padding: 12px 20px;
+            border-radius: 25px; font-size: 13px; font-weight: 600;
+            cursor: pointer; text-decoration: none; display: block;
+            text-align: center; width: 100%; box-sizing: border-box;
+            box-shadow: 0 4px 10px rgba(81, 45, 109, 0.3);
+            transition: all 0.2s;
+        }
+        .btn-primary:active { transform: scale(0.98); box-shadow: 0 2px 5px rgba(81, 45, 109, 0.2); }
+
+        .map-btn {
+            background: transparent; 
+            color: var(--primary);
+            border: 1px solid var(--primary);
+            padding: 6px 12px;
+            border-radius: 20px; font-size: 11px;
+            cursor: pointer; text-decoration: none;
+            display: inline-block;
+            margin-top: 5px;
+        }
+
+        /* List Items */
+        .list-item {
+            display: flex;
+            align-items: center;
+            background: white;
+            padding: 18px;
+            border-radius: 12px;
+            margin-bottom: 12px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.03);
+            border-left: 4px solid var(--secondary);
+        }
+        .list-icon {
+            width: 45px; height: 45px;
+            background: #f4eff7;
+            border-radius: 50%;
+            display: flex; align-items: center; justify-content: center;
+            color: var(--primary);
+            margin-right: 18px;
+            font-size: 20px;
+        }
+        .list-info { flex: 1; }
+        .list-name { font-weight: bold; font-size: 15px; color: #222; margin-bottom: 3px; }
+        .list-sub { font-size: 12px; color: #777; line-height: 1.4; }
+
+        /* Form */
+        .form-group { margin-bottom: 18px; }
+        label { font-size: 12px; font-weight: 700; color: var(--primary); margin-bottom: 8px; display: block; letter-spacing: 0.5px; text-transform: uppercase; }
+        input, select {
+            width: 100%; padding: 14px;
+            border: 1px solid #e0e0e0; border-radius: 10px;
+            font-size: 15px; box-sizing: border-box;
+            background: #fff;
+            transition: border-color 0.2s;
+        }
+        input:focus, select:focus { border-color: var(--primary); outline: none; box-shadow: 0 0 0 3px rgba(81, 45, 109, 0.1); }
+        
+        /* Language Helper Classes */
+        .lang-content { display: none; }
+        .lang-content.active { display: block; }
+        .lang-content.active-inline { display: inline; }
+        
+        /* Section Titles */
+        .section-title {
+            color: var(--primary);
+            margin: 10px 0 20px;
+            font-size: 18px;
+            border-bottom: 2px solid #eee;
+            padding-bottom: 10px;
+        }
+        /* PWA Install Button */
+        @media all and (display-mode: standalone) {
+            #installBtn { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="header">
+        <div class="lang-switch">
+            <button class="lang-btn active" onclick="setLang('id')">ID</button>
+            <button class="lang-btn" onclick="setLang('en')">EN</button>
+            <button class="lang-btn" onclick="setLang('cn')">CN</button>
+        </div>
+        
+        <!-- Install Button -->
+    <button id="installBtn" onclick="installApp()" style="position:absolute; top:20px; left:20px; z-index:9999; background:white; color:var(--primary); border:none; padding:5px 10px; border-radius:15px; font-size:12px; font-weight:bold; cursor:pointer; box-shadow:0 2px 5px rgba(0,0,0,0.2);">
+        <i class="fas fa-download"></i> Install
+    </button>
+
+    <!-- INSTALL GUIDE MODAL -->
+    <div id="installModal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.8); z-index:10000; justify-content:center; align-items:center;">
+        <div style="background:white; padding:25px; border-radius:15px; width:85%; max-width:350px; text-align:center; position:relative;">
+            <button onclick="closeInstallModal()" style="position:absolute; top:10px; right:10px; background:none; border:none; font-size:20px; color:#999; cursor:pointer;">&times;</button>
+            
+            <h3 style="margin-top:0; color:var(--primary);">Install Aplikasi</h3>
+            <p style="font-size:13px; color:#555; margin-bottom:20px;">Agar lebih mudah, install aplikasi ini ke HP Anda. Tidak perlu lagi buka Telegram.</p>
+            
+            <!-- Step 1: Copy Link -->
+            <div style="background:#f0f0f0; padding:10px; border-radius:8px; margin-bottom:15px;">
+                <p style="font-size:11px; font-weight:bold; margin:0 0 5px; color:#333;">Langkah 1: Salin Link</p>
+                <div style="display:flex; gap:5px;">
+                    <input type="text" id="appUrl" readonly style="flex:1; padding:8px; border:1px solid #ddd; border-radius:5px; font-size:12px; color:#555;">
+                    <button onclick="copyLink()" style="background:var(--secondary); color:white; border:none; padding:8px 12px; border-radius:5px; font-size:12px; cursor:pointer;">
+                        <i class="fas fa-copy"></i>
+                    </button>
+                </div>
+                <div id="copyMsg" style="font-size:10px; color:green; margin-top:5px; display:none;">Link berhasil disalin!</div>
+            </div>
+
+            <!-- Step 2: Open Browser -->
+            <div style="text-align:left; font-size:12px; color:#333; line-height:1.6;">
+                <strong>Langkah 2:</strong>
+                <ul style="margin:5px 0; padding-left:20px;">
+                    <li>Buka <b>Chrome</b> (Android) atau <b>Safari</b> (iOS).</li>
+                    <li>Tempel link tadi & Buka.</li>
+                    <li>Klik Menu (Titik Tiga / Share).</li>
+                    <li>Pilih <b>"Tambahkan ke Layar Utama"</b> (Add to Home Screen).</li>
+                </ul>
+            </div>
+
+            <button onclick="closeInstallModal()" style="background:var(--primary); color:white; border:none; width:100%; padding:12px; border-radius:25px; margin-top:15px; font-weight:bold; cursor:pointer;">Saya Mengerti</button>
+        </div>
+    </div>
+
+        <!-- Logo Image -->
+        <img src="{{ url_for('static', filename='logo.png') }}" alt="Mercure Logo">
+        <h2>MERCURE NEXA</h2>
+        <p>BANDUNG SUPRATMAN</p>
+    </div>
+
+    <div class="nav-tabs">
+        <div class="nav-item active" onclick="switchTab('rooms')">
+            <i class="fas fa-bed"></i>
+            <span class="lang-content active" data-lang="id">KAMAR</span>
+            <span class="lang-content" data-lang="en">ROOMS</span>
+            <span class="lang-content" data-lang="cn">客房</span>
+        </div>
+        <div class="nav-item" onclick="switchTab('booking')">
+            <i class="fas fa-calendar-check"></i>
+            <span class="lang-content active" data-lang="id">BOOKING</span>
+            <span class="lang-content" data-lang="en">BOOKING</span>
+            <span class="lang-content" data-lang="cn">预订</span>
+        </div>
+        <div class="nav-item" onclick="switchTab('facilities')">
+            <i class="fas fa-concierge-bell"></i>
+            <span class="lang-content active" data-lang="id">FASILITAS</span>
+            <span class="lang-content" data-lang="en">FACILITIES</span>
+            <span class="lang-content" data-lang="cn">设施</span>
+        </div>
+        <div class="nav-item" onclick="switchTab('city')">
+            <i class="fas fa-map-marked-alt"></i>
+            <span class="lang-content active" data-lang="id">PANDUAN</span>
+            <span class="lang-content" data-lang="en">GUIDE</span>
+            <span class="lang-content" data-lang="cn">指南</span>
+        </div>
+    </div>
+
+    <!-- ROOMS SECTION -->
+    <div id="rooms" class="section active">
+        <!-- Main Reservation Menu (Distinct from Room Booking) -->
+        <div style="margin-bottom: 25px;">
+            <a href="/reservasi" style="display: block; background: linear-gradient(135deg, #FF9800 0%, #F57C00 100%); color: white; padding: 20px; border-radius: 16px; text-decoration: none; box-shadow: 0 4px 15px rgba(245, 124, 0, 0.3); position: relative; overflow: hidden;">
+                <div style="position: relative; z-index: 2; display: flex; align-items: center; justify-content: space-between;">
+                    <div>
+                        <h3 style="margin: 0; font-size: 18px; font-weight: bold; text-transform: uppercase; letter-spacing: 1px;">
+                    <span class="lang-content active" data-lang="id">Form Reservasi</span>
+                    <span class="lang-content" data-lang="en">Reservation Form</span>
+                    <span class="lang-content" data-lang="cn">预订表格</span>
+                </h3>
+                <p style="margin: 5px 0 0; font-size: 13px; opacity: 0.9;">
+                    <span class="lang-content active" data-lang="id">Meeting, Wedding, Birthday & Acara Lain</span>
+                            <span class="lang-content" data-lang="en">Meeting, Wedding, Birthday & Events</span>
+                            <span class="lang-content" data-lang="cn">会议，婚礼，生日及其他活动</span>
+                        </p>
+                    </div>
+                    <div style="background: rgba(255,255,255,0.2); width: 40px; height: 40px; border-radius: 50%; display: flex; align-items: center; justify-content: center;">
+                        <i class="fas fa-arrow-right" style="font-size: 18px;"></i>
+                    </div>
+                </div>
+                <i class="fas fa-clipboard-list" style="position: absolute; right: -10px; bottom: -20px; font-size: 100px; opacity: 0.15; transform: rotate(-15deg);"></i>
+            </a>
+        </div>
+
+        {% for room in rooms %}
+        <div class="card">
+            <img src="{{ room.image }}" alt="{{ room.name.id }}">
+            <div class="card-body">
+                <div class="card-title">
+                    <span class="lang-content active" data-lang="id">{{ room.name.id }}</span>
+                    <span class="lang-content" data-lang="en">{{ room.name.en }}</span>
+                    <span class="lang-content" data-lang="cn">{{ room.name.cn }}</span>
+                    <span class="price">Rp {{ "{:,}".format(room.price).replace(',','.') }}</span>
+                </div>
+                <div class="card-desc">
+                    <span class="lang-content active" data-lang="id">{{ room.desc.id }}</span>
+                    <span class="lang-content" data-lang="en">{{ room.desc.en }}</span>
+                    <span class="lang-content" data-lang="cn">{{ room.desc.cn }}</span>
+                </div>
+                <button class="btn-primary" onclick="selectRoom('{{ room.name.id }}', {{ room.price }})">
+                    <span class="lang-content active" data-lang="id">Pilih Kamar Ini</span>
+                    <span class="lang-content" data-lang="en">Select This Room</span>
+                    <span class="lang-content" data-lang="cn">选择此房</span>
+                </button>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+
+    <!-- BOOKING SECTION -->
+    <div id="booking" class="section">
+        <div class="card">
+            <div class="card-body">
+                <h3 class="section-title">
+                    <span class="lang-content active" data-lang="id">Form Booking</span>
+                    <span class="lang-content" data-lang="en">Booking Form</span>
+                    <span class="lang-content" data-lang="cn">预订表格</span>
+                </h3>
+                
+                <!-- Booking Via -->
+                <div class="form-group">
+                    <label>
+                        <span class="lang-content active" data-lang="id">Booking Melalui</span>
+                        <span class="lang-content" data-lang="en">Booking Via</span>
+                        <span class="lang-content" data-lang="cn">预订渠道</span>
+                    </label>
+                    <select id="booking_via" disabled style="background-color: #e9ecef;">
+                        <option value="telegram">Telegram</option>
+                        <option value="web">Website / Browser</option>
+                    </select>
+                    <small style="display:block; margin-top:5px; text-align:right;">
+                        <a href="#" onclick="event.preventDefault(); document.getElementById('booking_via').disabled=false; this.style.display='none';" style="color:#999; font-size:11px; text-decoration:none;">
+                            <i class="fas fa-lock"></i> Auto-Locked (Click to Unlock)
+                        </a>
+                    </small>
+                </div>
+
+                <!-- Email (Required) -->
+                <div class="form-group" id="email_group">
+                    <label>
+                        <i class="fas fa-envelope"></i>
+                        <span class="lang-content active" data-lang="id">Email (Wajib)</span>
+                        <span class="lang-content" data-lang="en">Email (Required)</span>
+                        <span class="lang-content" data-lang="cn">电子邮件 (必填)</span>
+                    </label>
+                    <input type="text" id="email" placeholder="email@example.com / @username">
+                </div>
+                
+                <div class="form-group">
+                    <label>
+                        <span class="lang-content active" data-lang="id">Nama Lengkap</span>
+                        <span class="lang-content" data-lang="en">Full Name</span>
+                        <span class="lang-content" data-lang="cn">全名</span>
+                    </label>
+                    <input type="text" id="nama" placeholder="Name / 姓名">
+                </div>
+                
+                <div class="form-group">
+                    <label>
+                        <span class="lang-content active" data-lang="id">Tipe Kamar</span>
+                        <span class="lang-content" data-lang="en">Room Type</span>
+                        <span class="lang-content" data-lang="cn">房型</span>
+                    </label>
+                    <select id="tipe_kamar" onchange="updateTotal()">
+                        {% for room in rooms %}
+                        <option value="{{ room.name.id }}" data-price="{{ room.price }}">
+                            {{ room.name.id }} / {{ room.name.en }} / {{ room.name.cn }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                
+                <div class="form-group">
+                    <label>
+                        <i class="fas fa-calendar-alt"></i> 
+                        <span class="lang-content active" data-lang="id">Tanggal Booking</span>
+                        <span class="lang-content" data-lang="en">Check-in Date</span>
+                        <span class="lang-content" data-lang="cn">入住日期</span>
+                    </label>
+                    <input type="date" id="tgl_checkin" class="form-control">
+                </div>
+
+                <!-- Phone Number (Hidden/Optional) -->
+                <div class="form-group" id="phone_group" style="display:none;">
+                    <input type="tel" id="phone" class="form-control" value="-">
+                </div>
+                
+                <div class="form-group" style="display:flex; gap:15px;">
+                    <div style="flex:1;">
+                        <label>
+                            <span class="lang-content active" data-lang="id">Jml Kamar</span>
+                            <span class="lang-content" data-lang="en">Rooms</span>
+                            <span class="lang-content" data-lang="cn">房间数</span>
+                        </label>
+                        <input type="number" id="jml_kamar" value="1" min="1" onchange="updateTotal()">
+                    </div>
+                    <div style="flex:1;">
+                        <label>
+                            <span class="lang-content active" data-lang="id">Jml Orang</span>
+                            <span class="lang-content" data-lang="en">Guests</span>
+                            <span class="lang-content" data-lang="cn">人数</span>
+                        </label>
+                        <input type="number" id="jml_orang" value="1" min="1">
+                    </div>
+                </div>
+                
+                <div style="background:#f8f9fa; padding:15px; border-radius:12px; margin-bottom:20px; text-align:center; border: 1px dashed #ccc;">
+                    <span style="font-size:12px; color:#666;">
+                        <span class="lang-content active" data-lang="id">Estimasi Total</span>
+                        <span class="lang-content" data-lang="en">Total Estimate</span>
+                        <span class="lang-content" data-lang="cn">总额预估</span>
+                    </span><br>
+                    <strong style="color:var(--primary); font-size:22px;" id="total_display">Rp 0</strong>
+                </div>
+                
+                <button class="btn-primary" onclick="submitBooking()">
+                    <span class="lang-content active" data-lang="id">KONFIRMASI BOOKING</span>
+                    <span class="lang-content" data-lang="en">CONFIRM BOOKING</span>
+                    <span class="lang-content" data-lang="cn">确认预订</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- FACILITIES SECTION -->
+    <div id="facilities" class="section">
+        {% for fac in facilities %}
+        <div class="list-item">
+            <div class="list-icon"><i class="fas {{ fac.icon }}"></i></div>
+            <div class="list-info">
+                <div class="list-name">
+                    <span class="lang-content active" data-lang="id">{{ fac.name.id }}</span>
+                    <span class="lang-content" data-lang="en">{{ fac.name.en }}</span>
+                    <span class="lang-content" data-lang="cn">{{ fac.name.cn }}</span>
+                </div>
+                <div class="list-sub">
+                    <span class="lang-content active" data-lang="id">{{ fac.desc.id }}</span>
+                    <span class="lang-content" data-lang="en">{{ fac.desc.en }}</span>
+                    <span class="lang-content" data-lang="cn">{{ fac.desc.cn }}</span>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+
+    <!-- CITY GUIDE SECTION -->
+    <div id="city" class="section">
+        <h4 class="section-title">
+            <span class="lang-content active" data-lang="id">Lokasi Hotel</span>
+            <span class="lang-content" data-lang="en">Hotel Location</span>
+            <span class="lang-content" data-lang="cn">酒店位置</span>
+        </h4>
+        <div class="card">
+            <iframe 
+                width="100%" 
+                height="200" 
+                frameborder="0" 
+                style="border:0; display:block;" 
+                src="https://maps.google.com/maps?q=Mercure+Bandung+Nexa+Supratman&t=&z=15&ie=UTF8&iwloc=&output=embed" 
+                allowfullscreen>
+            </iframe>
+            <div class="card-body">
+                <a href="https://www.google.com/maps/search/?api=1&query=Mercure+Bandung+Nexa+Supratman" target="_blank" class="btn-primary" style="text-decoration:none;">
+                    <i class="fas fa-location-arrow"></i> 
+                    <span class="lang-content active" data-lang="id" style="display:inline;">Buka Google Maps</span>
+                    <span class="lang-content" data-lang="en" style="display:inline;">Open Google Maps</span>
+                    <span class="lang-content" data-lang="cn" style="display:inline;">打开谷歌地图</span>
+                </a>
+            </div>
+        </div>
+
+        <h4 class="section-title">
+            <span class="lang-content active" data-lang="id">Pusat Perbelanjaan (Mall)</span>
+            <span class="lang-content" data-lang="en">Shopping Centers (Mall)</span>
+            <span class="lang-content" data-lang="cn">购物中心 (商场)</span>
+        </h4>
+        {% for mall in malls %}
+        <div class="list-item">
+            <div class="list-icon"><i class="fas fa-shopping-bag"></i></div>
+            <div class="list-info">
+                <div class="list-name">{{ mall.name }}</div>
+                <div class="list-sub">
+                    <span class="lang-content active" data-lang="id">{{ mall.desc.id }}</span>
+                    <span class="lang-content" data-lang="en">{{ mall.desc.en }}</span>
+                    <span class="lang-content" data-lang="cn">{{ mall.desc.cn }}</span>
+                </div>
+            </div>
+            <a href="https://www.google.com/maps/dir/?api=1&origin=Mercure+Bandung+Nexa+Supratman&destination={{ mall.coords }}" target="_blank" class="map-btn">
+                <i class="fas fa-location-arrow"></i> Map
+            </a>
+        </div>
+        {% endfor %}
+
+        <h4 class="section-title" style="margin-top:30px;">
+            <span class="lang-content active" data-lang="id">ATM Terdekat</span>
+            <span class="lang-content" data-lang="en">Nearest ATM</span>
+            <span class="lang-content" data-lang="cn">最近的 ATM</span>
+        </h4>
+        {% for atm in atms %}
+        <div class="list-item" style="border-left-color: #28a745;">
+            <div class="list-icon" style="color:#28a745; background:#e8f5e9;"><i class="fas fa-money-bill-wave"></i></div>
+            <div class="list-info">
+                <div class="list-name">{{ atm.name }}</div>
+                <div class="list-sub">
+                    <span class="lang-content active" data-lang="id">{{ atm.desc.id }}</span>
+                    <span class="lang-content" data-lang="en">{{ atm.desc.en }}</span>
+                    <span class="lang-content" data-lang="cn">{{ atm.desc.cn }}</span>
+                </div>
+            </div>
+            <a href="https://www.google.com/maps/dir/?api=1&origin=Mercure+Bandung+Nexa+Supratman&destination={{ atm.coords }}" target="_blank" class="map-btn" style="border-color:#28a745; color:#28a745;">
+                <i class="fas fa-location-arrow"></i> Map
+            </a>
+        </div>
+        {% endfor %}
+    </div>
+
+    <div class="footer" style="text-align: center; padding: 20px; color: #999; font-size: 11px; margin-top: 40px; border-top: 1px solid #eee;">
+        Sentra Guest OS @2025 | SGO V1.5 (UI Fixes)<br>
+        <span style="color: #ff0000; font-size: 11px; font-weight:bold; cursor: pointer;" onclick="window.location.reload(true)">
+            [CACHE CLEARED] Updated: 06 Jan 2025 V6 (Click to Refresh)
+        </span>
+    </div>
+
+    <script>
+        // --- SAFE TELEGRAM DETECTION ---
+        let tg = null;
+        let isTelegram = false;
+        
+        try {
+            if (window.Telegram && window.Telegram.WebApp) {
+                tg = window.Telegram.WebApp;
+                tg.expand();
+                // Check initData to be sure we are in Bot context
+                if (tg.initData && tg.initData.length > 0) {
+                    isTelegram = true;
+                }
+            }
+        } catch (e) {
+            console.warn("Telegram WebApp not detected:", e);
+        }
+
+        // --- NEW LOGIC: Geolocation & Context ---
+        let userLat = 0;
+        let userLng = 0;
+
+        // Get Location on Load
+        if (navigator.geolocation) {
+            navigator.geolocation.getCurrentPosition(
+                (pos) => { 
+                    userLat = pos.coords.latitude; 
+                    userLng = pos.coords.longitude; 
+                    console.log("Loc:", userLat, userLng);
+                },
+                (err) => { console.log("Loc error:", err); }
+            );
+        }
+
+        // Auto-detect Telegram Context
+        window.addEventListener('load', () => {
+            const viaSelect = document.getElementById('booking_via');
+            
+            if (isTelegram) {
+                viaSelect.value = 'telegram';
+            } else {
+                viaSelect.value = 'web';
+            }
+            
+            // Pastikan terkunci
+            viaSelect.disabled = true;
+            
+            toggleEmail();
+            
+            // Listen for changes
+            viaSelect.addEventListener('change', toggleEmail);
+        });
+
+        function toggleEmail() {
+            const via = document.getElementById('booking_via').value;
+            const emailGroup = document.getElementById('email_group');
+            if (via === 'telegram') {
+                emailGroup.style.display = 'none';
+            } else {
+                emailGroup.style.display = 'block';
+            }
+        }
+        // --- END NEW LOGIC ---
+
+        document.getElementById('tgl_checkin').valueAsDate = new Date();
+
+        function setLang(lang) {
+            // Update active content
+            document.querySelectorAll('.lang-content').forEach(el => {
+                if(el.dataset.lang === lang) {
+                    el.classList.add('active');
+                } else {
+                    el.classList.remove('active');
+                }
+            });
+            
+            // Update active button
+            document.querySelectorAll('.lang-btn').forEach(btn => btn.classList.remove('active'));
+            // Find the button that called this (simple way)
+            const btns = document.getElementsByClassName('lang-btn');
+            if(lang === 'id') btns[0].classList.add('active');
+            if(lang === 'en') btns[1].classList.add('active');
+            if(lang === 'cn') btns[2].classList.add('active');
+        }
+
+        function switchTab(tabId) {
+            document.querySelectorAll('.section').forEach(el => el.classList.remove('active'));
+            document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
+            
+            document.getElementById(tabId).classList.add('active');
+            
+            const tabs = document.querySelectorAll('.nav-item');
+            if(tabId === 'rooms') tabs[0].classList.add('active');
+            if(tabId === 'booking') tabs[1].classList.add('active');
+            if(tabId === 'facilities') tabs[2].classList.add('active');
+            if(tabId === 'city') tabs[3].classList.add('active');
+        }
+
+        function selectRoom(nameId, price) {
+            const select = document.getElementById('tipe_kamar');
+            for(let i=0; i<select.options.length; i++) {
+                // Check against value (which is name_id)
+                if(select.options[i].value === nameId) {
+                    select.selectedIndex = i;
+                    break;
+                }
+            }
+            switchTab('booking');
+            updateTotal();
+        }
+
+        function updateTotal() {
+            const select = document.getElementById('tipe_kamar');
+            const price = parseInt(select.options[select.selectedIndex].getAttribute('data-price'));
+            const qty = parseInt(document.getElementById('jml_kamar').value);
+            const total = price * qty;
+            document.getElementById('total_display').innerText = 'Rp ' + total.toLocaleString('id-ID');
+            return total;
+        }
+
+        function submitBooking() {
+            const nama = document.getElementById('nama').value;
+            const tgl = document.getElementById('tgl_checkin').value;
+            // const phone = document.getElementById('phone').value; // Removed
+            const tipe = document.getElementById('tipe_kamar').value;
+            const jml = document.getElementById('jml_kamar').value;
+            const orang = document.getElementById('jml_orang').value;
+            
+            // New Fields
+            const via = document.getElementById('booking_via').value;
+            const email = document.getElementById('email').value;
+
+            // Validation Logic
+            if (!nama || !tgl) {
+                 if (tg && isTelegram) tg.showAlert("Mohon lengkapi Nama dan Tanggal.");
+                 else alert("Mohon lengkapi Nama dan Tanggal.");
+                 return;
+            }
+            
+            // Phone validation removed
+            /*
+            if (via === 'telegram' && !phone) {
+                tg.showAlert("Mohon lengkapi No. HP / WhatsApp.");
+                return;
+            }
+            */
+
+            if (via === 'web' && !email) {
+                if (tg && isTelegram) tg.showAlert("Mohon lengkapi Email.");
+                else alert("Mohon lengkapi Email.");
+                return;
+            }
+
+            const total = updateTotal();
+            const totalStr = total.toLocaleString('id-ID');
+
+            const btn = document.querySelector('.btn-primary[onclick="submitBooking()"]');
+            const originalText = btn.innerHTML;
+            btn.innerText = "Processing...";
+            btn.disabled = true;
+
+            const payload = {
+                chat_id: (tg && tg.initDataUnsafe && tg.initDataUnsafe.user) ? tg.initDataUnsafe.user.id : 'unknown',
+                nama: nama,
+                phone: '-', // Default empty
+                email: email || '-',
+                via: via,
+                lat: userLat,
+                lng: userLng,
+                tipe: tipe,
+                tgl: tgl,
+                jml_kamar: jml,
+                orang: orang,
+                total_harga: totalStr
+            };
+
+            fetch('/submit_booking', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            })
+            .then(response => response.json())
+            .then(data => {
+                if(data.status === 'success') {
+                    if (tg && isTelegram) {
+                        tg.showAlert(`Booking Success!\nResi: ${data.resi}`);
+                    } else {
+                        alert(`Booking Success!\nResi: ${data.resi}`);
+                    }
+                    
+                    // Close app after delay
+                    setTimeout(() => {
+                        try {
+                            tg.close();
+                        } catch(e) {
+                            console.log("tg.close failed");
+                        }
+                        // Fallback reload if not closed
+                        window.location.reload();
+                    }, 2000);
+                } else {
+                    if (tg && isTelegram) tg.showAlert("Error: " + data.message);
+                    else alert("Error: " + data.message);
+                }
+            })
+            .catch(err => {
+                console.error(err);
+                if (tg && isTelegram) tg.showAlert("Connection Error: " + err);
+                else alert("Connection Error: " + err);
+            })
+            .finally(() => {
+                // ALWAYS RESET BUTTON
+                btn.innerHTML = originalText;
+                btn.disabled = false;
+            });
+        }
+
+        updateTotal();
+
+        // --- PWA LOGIC (FORCE UPDATE) ---
+        // FORCE UNREGISTER ALL SERVICE WORKERS TO CLEAR CACHE
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.getRegistrations().then(function(registrations) {
+                for(let registration of registrations) {
+                    console.log('Unregistering SW:', registration);
+                    registration.unregister();
+                }
+            });
+            
+            // Re-register with new version query to bust cache
+            window.addEventListener('load', () => {
+                // Delay slightly to allow unregister to finish
+                setTimeout(() => {
+                    navigator.serviceWorker.register("/sw.js?v=9").then(reg => {
+                        console.log('SW Registered!', reg);
+                        reg.update();
+                    });
+                }, 1000);
+            });
+        }
+
+        // Install Prompt
+        let deferredPrompt;
+        const installBtn = document.getElementById('installBtn');
+
+        // Check iOS
+        const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+        
+        // Initialize URL input
+        document.getElementById('appUrl').value = window.location.href.split('#')[0];
+
+        window.addEventListener('beforeinstallprompt', (e) => {
+            // Prevent Chrome 67 and earlier from automatically showing the prompt
+            e.preventDefault();
+            // Stash the event so it can be triggered later.
+            deferredPrompt = e;
+            console.log("beforeinstallprompt fired");
+        });
+
+        function installApp() {
+            if (deferredPrompt) {
+                // Show the prompt
+                deferredPrompt.prompt();
+                deferredPrompt.userChoice.then((choiceResult) => {
+                    deferredPrompt = null;
+                });
+            } else {
+                // Show Custom Modal for Manual Install
+                document.getElementById('installModal').style.display = 'flex';
+            }
+        }
+
+        function closeInstallModal() {
+            document.getElementById('installModal').style.display = 'none';
+        }
+
+        function copyLink() {
+            const copyText = document.getElementById("appUrl");
+            
+            // Select the text field
+            copyText.select();
+            copyText.setSelectionRange(0, 99999); // For mobile devices
+
+             // Copy the text inside the text field
+            try {
+                navigator.clipboard.writeText(copyText.value).then(() => {
+                    showCopySuccess();
+                });
+            } catch (err) {
+                // Fallback
+                document.execCommand("copy");
+                showCopySuccess();
+            }
+        }
+
+        function showCopySuccess() {
+             const msg = document.getElementById("copyMsg");
+             msg.style.display = 'block';
+             setTimeout(() => { msg.style.display = 'none'; }, 2000);
+        }
+    </script>
+</body>
+</html>

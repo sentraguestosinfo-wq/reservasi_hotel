@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <style>
+        body { font-family: sans-serif; margin: 0; background: #fff; }
+        .header { background: #512d6d; padding: 15px; text-align: center; color: white; border-bottom: 3px solid #d4af37; }
+        .tab-bar { display: flex; background: #eee; }
+        .tab { flex: 1; padding: 15px; text-align: center; font-weight: bold; cursor: pointer; }
+        .tab.active { background: #fff; color: #512d6d; border-bottom: 2px solid #512d6d; }
+        .content { display: none; padding: 20px; }
+        .content.active { display: block; }
+        input, select { width: 100%; padding: 12px; margin: 10px 0; border: 1px solid #ccc; border-radius: 5px; box-sizing: border-box; }
+        .btn { width: 100%; background: #512d6d; color: white; padding: 15px; border: none; border-radius: 5px; font-weight: bold; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <img src="/static/logo.png" style="width:120px;" onerror="this.style.display='none'">
+        <div style="font-size:12px;">Nexa Supratman Bandung</div>
+    </div>
+    <div class="tab-bar">
+        <div class="tab active" onclick="sw('book', event)">RESERVASI</div>
+        <div class="tab" onclick="sw('info', event)">INFO HOTEL</div>
+    </div>
+    <div id="book" class="content active">
+        <input type="text" id="nama" placeholder="Nama Lengkap">
+        <select id="tipe">
+            <option value="Superior" data-price="850000">Superior Room - 850k</option>
+            <option value="Deluxe" data-price="1050000">Deluxe Room - 1.050k</option>
+        </select>
+        <input type="date" id="tgl">
+        <input type="number" id="jml" value="1" placeholder="Jumlah Kamar">
+        <input type="number" id="orang" value="1" placeholder="Jumlah Orang">
+        <button class="btn" onclick="kirim()">KONFIRMASI</button>
+    </div>
+    <div id="info" class="content">
+        <h4>Fasilitas & Layanan</h4>
+        <p>• Nexa Restaurant (Lantai 1)</p>
+        <p>• Gym & Spa (Lantai 2)</p>
+        <h4>Rekomendasi Kuliner</h4>
+        <p>1. Miss Bee Providore</p>
+        <p>2. Hummingbird Eatery</p>
+        <p>3. Alas Daun</p>
+    </div>
+    <script>
+        const tg = window.Telegram.WebApp; tg.expand();
+        function sw(id, e) {
+            document.querySelectorAll('.content').forEach(c => c.classList.remove('active'));
+            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+            document.getElementById(id).classList.add('active'); e.currentTarget.classList.add('active');
+        }
+        function kirim() {
+            const s = document.getElementById('tipe');
+            const p = {
+                chat_id: tg.initDataUnsafe.user.id, nama: document.getElementById('nama').value,
+                tipe: s.value, tgl: document.getElementById('tgl').value,
+                jml_kamar: document.getElementById('jml').value, orang: document.getElementById('orang').value,
+                total_harga: (s.options[s.selectedIndex].getAttribute('data-price') * document.getElementById('jml').value).toLocaleString('id-ID')
+            };
+            fetch('/submit_booking', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(p) }).then(() => tg.close());
+        }
+    </script>
+</body>
+</html>
