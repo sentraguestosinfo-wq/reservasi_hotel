@@ -2,8 +2,7 @@
 import telebot
 from telebot import types
 from flask import Flask, render_template, request, jsonify, send_file, redirect, make_response
-from datetime import datetime, timedelta
-from threading import Thread
+
 import os
 import data  # Import data.py
 import urllib.parse
