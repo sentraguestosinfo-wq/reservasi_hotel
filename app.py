@@ -607,6 +607,7 @@ def help_cmd(message):
 @bot.message_handler(commands=['dashboard_reservasi'])
 def dashboard_reservasi_cmd(message):
     if message.chat.id not in STAFF_FO_IDS:
+        bot.send_message(message.chat.id, f"❌ Akses Ditolak. ID Anda: {message.chat.id} tidak terdaftar sebagai Staff FO.")
         return
     url = f"{NGROK_URL}/staff/dashboard_reservasi"
     try:
@@ -624,6 +625,7 @@ def cek_booking(message):
     # Validasi: Hanya Staff FO yang boleh akses
     if message.chat.id not in STAFF_FO_IDS:
         print(f"DEBUG: Access denied for {message.chat.id}")
+        bot.send_message(message.chat.id, f"❌ Akses Ditolak. ID Anda: {message.chat.id} tidak terdaftar sebagai Staff FO.")
         return
 
     try:
@@ -711,6 +713,7 @@ class PDF(FPDF):
 def cetak_lap_harian(message):
     # Validasi: Hanya Staff FO
     if message.chat.id not in STAFF_FO_IDS:
+        bot.send_message(message.chat.id, f"❌ Akses Ditolak. ID Anda: {message.chat.id} tidak terdaftar sebagai Staff FO.")
         return
 
     bot.send_message(message.chat.id, "⏳ Sedang membuat Laporan Booking Harian...")
@@ -816,6 +819,7 @@ def cetak_lap_harian(message):
 @bot.message_handler(commands=['cetak_laporan_reservasi'])
 def cetak_laporan_reservasi(message):
     if message.chat.id not in STAFF_FO_IDS:
+        bot.send_message(message.chat.id, f"❌ Akses Ditolak. ID Anda: {message.chat.id} tidak terdaftar sebagai Staff FO.")
         return
     bot.send_message(message.chat.id, "⏳ Sedang membuat Laporan Reservasi Harian...")
     try:
@@ -903,6 +907,7 @@ def cetak_laporan_reservasi(message):
 @bot.message_handler(commands=['date_reservasi'])
 def bot_date_reservasi(message):
     if message.chat.id not in STAFF_FO_IDS:
+        bot.send_message(message.chat.id, f"❌ Akses Ditolak. ID Anda: {message.chat.id} tidak terdaftar sebagai Staff FO.")
         return
         
     calendar_url = f"{NGROK_URL}/date_reservasi"
