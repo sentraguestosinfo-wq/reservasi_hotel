@@ -17,7 +17,7 @@ from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from email.mime.image import MIMEImage
 import socket  # Added for DNS resolution
-import dns.resolver # Added for Custom DNS resolution
+from supabase import create_client, Client
 
 # --- KONFIGURASI ---
 # GANTI DENGAN TOKEN BOT ANDA
@@ -25,19 +25,12 @@ API_TOKEN = '8556104756:AAGVZJyvrxV4P-yN486BH7K5SR_f8jRZDLw'
 # URL Ngrok yang diberikan user (pastikan https)
 NGROK_URL = 'https://reservasi-hotel-seven.vercel.app'
 
-# DB URI
-# DB URI
-# Menggunakan Regional Supavisor (Singapore) untuk IPv4 Support
-# Format User: [db_user].[project_ref]
-DB_URI = "postgresql://postgres.relkgipocdukdusakdtv:sentraguest%407478@aws-0-ap-southeast-1.pooler.supabase.com:6543/postgres?sslmode=require"
-
-def get_db_connection():
-    try:
-        conn = psycopg2.connect(DB_URI, connect_timeout=10)
-        return conn
-    except Exception as e:
-        print(f"Database connection error: {e}")
-        return None
+# SUPABASE CONFIG (REST API MODE)
+SUPABASE_URL = "https://relkgipocdukdusakdtv.supabase.co"
+# Note: Using SERVICE_ROLE key is risky for frontend but okay for backend server. 
+# Better to use env vars, but hardcoded here as per user style.
+SUPABASE_KEY = "sb_secret_qc2aaevA7-UEx_YNS93uVQ__JwiQVP4" 
+supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 # KONFIGURASI EMAIL
 GMAIL_USER = 'sentraguest.os@gmail.com'
@@ -1557,18 +1550,16 @@ def init_webhook():
 @app.route('/test_db')
 def test_db_route():
     try:
-        conn = psycopg2.connect(DB_URI, connect_timeout=10)
-        cur = conn.cursor()
-        cur.execute("SELECT version()")
-        ver = cur.fetchone()
-        conn.close()
-        return f"Database Connected! Version: {ver} (Supavisor IPv4)", 200
+        # Test Supabase REST API Connection
+        response = supabase.table('bookings').select("count", count='exact').limit(1).execute()
+        count = response.count
+        return f"Database Connected via REST API! Bookings count: {count}", 200
     except Exception as e:
-        return f"Database Connection Failed: {str(e)}", 500
+        return f"Database Connection Failed (REST API): {str(e)}", 500
 
 @app.route('/version')
 def version_route():
-    return "App Version: 1.7 (Supavisor Regional Pooler)", 200
+    return "App Version: 2.0 (Supabase REST API - No IPv6 Issues)", 200
 
 if __name__ == '__main__':
     init_db()
