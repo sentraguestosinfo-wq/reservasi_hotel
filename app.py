@@ -1539,6 +1539,18 @@ def init_webhook():
     except Exception as e:
         return f"Failed to set webhook: {e}", 500
 
+@app.route('/test_db')
+def test_db_route():
+    try:
+        conn = psycopg2.connect(DB_URI, connect_timeout=10)
+        cur = conn.cursor()
+        cur.execute("SELECT version()")
+        ver = cur.fetchone()
+        conn.close()
+        return f"Database Connected! Version: {ver}", 200
+    except Exception as e:
+        return f"Database Connection Failed: {str(e)}", 500
+
 if __name__ == '__main__':
     init_db()
     print("\n\n=======================================================")
