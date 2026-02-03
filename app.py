@@ -28,7 +28,7 @@ try:
         return [response for response in responses if response[0] == socket.AF_INET]
     socket.getaddrinfo = new_getaddrinfo
     print("IPv4 Forced for socket connections.")
-    print("App Version: 2.1 - Fix Handler Clash & Calendar")
+    print("App Version: 3.0 - Force Vercel Rebuild")
 except Exception as e:
     print(f"Failed to force IPv4: {e}")
 
