@@ -571,7 +571,7 @@ def submit_booking():
 
                     if has_phone:
                         # Tampilkan Tombol WA dengan REDIRECT URL
-                        redirect_url = f"{NGROK_URL}/wa_redirect?resi={resi}&id={sid}&mid={sent_msg.message_id}"
+                        redirect_url = f"{APP_URL}/wa_redirect?resi={resi}&id={sid}&mid={sent_msg.message_id}"
                         
                         btn_qris_wa = types.InlineKeyboardButton("📤 Kirim QRIS (WhatsApp)", url=redirect_url)
                         markup.add(btn_qris_wa)
@@ -658,7 +658,7 @@ def logic_dashboard_reservasi(message):
         bot.send_message(message.chat.id, f"❌ Akses Ditolak. ID Anda: {message.chat.id} tidak terdaftar sebagai Staff FO.")
         return
     
-    url = f"{NGROK_URL}/staff/dashboard_reservasi"
+    url = f"{APP_URL}/staff/dashboard_reservasi"
     try:
         markup = types.InlineKeyboardMarkup()
         btn = types.InlineKeyboardButton("🗂️ Buka Dashboard Reservasi", url=url)
@@ -673,7 +673,7 @@ def logic_cek_pembayaran(message):
         bot.send_message(message.chat.id, f"❌ Akses Ditolak. ID Anda: {message.chat.id} tidak terdaftar sebagai Staff FO.")
         return
         
-    dashboard_url = f"{NGROK_URL}/staff/dashboard"
+    dashboard_url = f"{APP_URL}/staff/dashboard"
     
     markup = types.InlineKeyboardMarkup()
     btn = types.InlineKeyboardButton("🖥️ Buka Dashboard Staff", url=dashboard_url)
@@ -693,7 +693,7 @@ def logic_date_reservasi(message):
         bot.send_message(message.chat.id, f"❌ Akses Ditolak. ID Anda: {message.chat.id} tidak terdaftar sebagai Staff FO.")
         return
         
-    calendar_url = f"{NGROK_URL}/date_reservasi"
+    calendar_url = f"{APP_URL}/date_reservasi"
     
     markup = types.InlineKeyboardMarkup()
     btn = types.InlineKeyboardButton("📅 Tampilkan Kalender", url=calendar_url)
@@ -760,7 +760,7 @@ def logic_cek_booking(message):
                 else:
                     # Web User (WhatsApp)
                     # Redirect ke WA Helper
-                    markup.add(types.InlineKeyboardButton("📤 Kirim QRIS (WhatsApp)", url=f"{NGROK_URL}/wa_redirect?resi={resi}&id={message.chat.id}&mid=0")) 
+                    markup.add(types.InlineKeyboardButton("📤 Kirim QRIS (WhatsApp)", url=f"{APP_URL}/wa_redirect?resi={resi}&id={message.chat.id}&mid=0")) 
                     markup.add(types.InlineKeyboardButton("💬 Chat Tamu (WhatsApp)", url=f"https://wa.me/{clean_phone}"))
             else:
                 # Already sent
