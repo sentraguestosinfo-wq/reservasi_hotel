@@ -985,6 +985,9 @@ def logic_cetak_laporan_reservasi(message):
 
 @bot.callback_query_handler(func=lambda call: call.data.startswith('qris_') and not call.data.startswith('qris_email_'))
 def handle_qris(call):
+    # Beri feedback langsung agar tidak timeout
+    bot.answer_callback_query(call.id, "Sedang memproses pengiriman QRIS...")
+    
     try:
         parts = call.data.split('_')
         if len(parts) < 3:
@@ -993,9 +996,10 @@ def handle_qris(call):
         resi = parts[1]
         guest_chat_id = parts[2]
         
+        print(f"DEBUG: Sending QRIS to guest {guest_chat_id} for resi {resi}")
+        
         # Validasi ID Tamu
         if guest_chat_id == 'unknown' or not guest_chat_id:
-            bot.answer_callback_query(call.id, "Data tamu tidak valid ❌")
             bot.send_message(call.message.chat.id, f"❌ Tidak dapat mengirim QRIS. Tamu booking melalui browser/bukan Telegram (ID: {guest_chat_id}).")
             return
 
@@ -1012,24 +1016,24 @@ def handle_qris(call):
         qris_path = os.path.join(base_dir, 'QRIS.jpg')
         
         if not os.path.exists(qris_path):
-            bot.answer_callback_query(call.id, "File QRIS hilang! ❌")
             bot.send_message(call.message.chat.id, "❌ File 'QRIS.jpg' tidak ditemukan di server.")
             return
 
         # Kirim ke Tamu
         try:
+            salutation = f"👋 Halo {format_guest_name(guest_name)}," if guest_name else "👋 Halo,"
+            caption = (f"{salutation}\n\nTerima kasih telah melakukan reservasi di Mercure Bandung Nexa Supratman.\n"
+                       f"🆔 No. Resi: *{resi}*\n\n"
+                       "Untuk menyelesaikan pemesanan, mohon lakukan pembayaran melalui Scan QRIS di atas.\n"
+                       "Setelah transfer, mohon kirimkan bukti transfer di chat ini.\n\n"
+                       "Terima kasih! 🙏")
+            
+            # METHOD 1: Send Photo File
             with open(qris_path, 'rb') as photo:
-                salutation = f"👋 Halo {format_guest_name(guest_name)}," if guest_name else "👋 Halo,"
-                caption = (f"{salutation}\n\nTerima kasih telah melakukan reservasi di Mercure Bandung Nexa Supratman.\n"
-                           f"🆔 No. Resi: *{resi}*\n\n"
-                           "Untuk menyelesaikan pemesanan, mohon lakukan pembayaran melalui Scan QRIS di atas.\n"
-                           "Setelah transfer, mohon kirimkan bukti transfer di chat ini.\n\n"
-                           "Terima kasih! 🙏")
                 bot.send_photo(guest_chat_id, photo, caption=caption, parse_mode='Markdown')
             
             # Konfirmasi ke Staff
-            bot.answer_callback_query(call.id, "QRIS Terkirim! ✅")
-            bot.send_message(call.message.chat.id, f"✅ QRIS berhasil dikirim ke tamu dengan Resi {resi}.")
+            bot.send_message(call.message.chat.id, f"✅ QRIS berhasil dikirim ke tamu (ID: {guest_chat_id}).")
             
             # Update status di database
             try:
@@ -1066,6 +1070,29 @@ def handle_qris(call):
             
             except Exception as e:
                 print(f"Gagal update UI pesan: {e}")
+                
+        except telebot.apihelper.ApiTelegramException as e:
+            error_msg = str(e)
+            print(f"Telegram API Error: {error_msg}")
+            
+            # Fallback jika gagal kirim gambar (misal diblokir atau file bermasalah)
+            if "forbidden" in error_msg.lower() or "blocked" in error_msg.lower():
+                 bot.send_message(call.message.chat.id, f"❌ Gagal: Tamu memblokir bot.\nID: {guest_chat_id}")
+            elif "chat not found" in error_msg.lower():
+                 bot.send_message(call.message.chat.id, f"❌ Gagal: Chat ID tamu tidak ditemukan (Mungkin belum start bot).\nID: {guest_chat_id}")
+            else:
+                 # Coba kirim via URL sebagai alternatif
+                 bot.send_message(call.message.chat.id, f"⚠️ Gagal kirim gambar file. Mencoba kirim Link...")
+                 try:
+                     image_url = f"{APP_URL}/qris_image"
+                     bot.send_message(guest_chat_id, f"{caption}\n\n[Klik Disini untuk Lihat QRIS]({image_url})", parse_mode='Markdown')
+                     bot.send_message(call.message.chat.id, f"✅ QRIS dikirim sebagai Link (Fallback).")
+                 except Exception as ex2:
+                     bot.send_message(call.message.chat.id, f"❌ Gagal Total mengirim QRIS: {e} | Link: {ex2}")
+
+    except Exception as e:
+        print(f"CRITICAL ERROR in handle_qris: {e}")
+        bot.send_message(call.message.chat.id, f"❌ System Error saat mengirim QRIS: {e}")
                 
         except telebot.apihelper.ApiTelegramException as e:
             error_msg = str(e)
