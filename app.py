@@ -98,9 +98,9 @@ def sw():
 
 @app.route('/qris_image')
 def qris_image():
-    # Sajikan file qris.jpeg dari root directory (Safe for Vercel)
+    # Sajikan file QRIS.jpg dari root directory (Safe for Vercel)
     base_dir = os.path.dirname(os.path.abspath(__file__))
-    qris_path = os.path.join(base_dir, 'qris.jpeg')
+    qris_path = os.path.join(base_dir, 'QRIS.jpg')
     
     if os.path.exists(qris_path):
         return send_file(qris_path, mimetype='image/jpeg')
@@ -1009,11 +1009,11 @@ def handle_qris(call):
 
         # Cek file QRIS
         base_dir = os.path.dirname(os.path.abspath(__file__))
-        qris_path = os.path.join(base_dir, 'qris.jpeg')
+        qris_path = os.path.join(base_dir, 'QRIS.jpg')
         
         if not os.path.exists(qris_path):
             bot.answer_callback_query(call.id, "File QRIS hilang! ❌")
-            bot.send_message(call.message.chat.id, "❌ File 'qris.jpeg' tidak ditemukan di server.")
+            bot.send_message(call.message.chat.id, "❌ File 'QRIS.jpg' tidak ditemukan di server.")
             return
 
         # Kirim ke Tamu
