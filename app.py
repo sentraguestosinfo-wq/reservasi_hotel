@@ -488,16 +488,19 @@ def submit_booking():
 
         # Send Email Confirmation if email exists
         if email and email != '-':
-            # Run in thread to not block response
-            Thread(target=send_booking_email, args=(email, {
-                'resi': resi,
-                'nama': data_req['nama'],
-                'tgl': data_req['tgl'],
-                'tipe': data_req['tipe'],
-                'jml_kamar': data_req['jml_kamar'],
-                'orang': data_req['orang'],
-                'total_harga': data_req['total_harga']
-            })).start()
+            # Run synchronous for Vercel stability (Threads are unreliable in serverless)
+            try:
+                send_booking_email(email, {
+                    'resi': resi,
+                    'nama': data_req['nama'],
+                    'tgl': data_req['tgl'],
+                    'tipe': data_req['tipe'],
+                    'jml_kamar': data_req['jml_kamar'],
+                    'orang': data_req['orang'],
+                    'total_harga': data_req['total_harga']
+                })
+            except Exception as e:
+                print(f"Failed to send email (sync): {e}")
 
         # Calculate Deadline
         deadline_dt = current_time + timedelta(hours=2)
