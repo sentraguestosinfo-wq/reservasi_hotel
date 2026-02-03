@@ -654,7 +654,7 @@ def staff_command_dispatcher(message):
     elif cmd == 'cetak_laporan_reservasi':
         logic_cetak_laporan_reservasi(message)
     elif cmd == 'sys_check':
-        bot.send_message(message.chat.id, "✅ System Online\nVersion: 2.3 (Unified Handler)\nDeployment: OK")
+                bot.send_message(message.chat.id, "✅ System Online\nVersion: 2.4 (Vercel Fix)\nDeployment: ACTIVE\nStatus: Ready")
 
 def logic_dashboard_reservasi(message):
     print(f"DEBUG: /dashboard_reservasi accessed by {message.chat.id}")
