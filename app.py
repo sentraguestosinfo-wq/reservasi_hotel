@@ -1565,7 +1565,7 @@ def test_db_route():
 
 @app.route('/version')
 def version_route():
-    return "App Version: 2.4 (Unified Command Handler)", 200
+    return "App Version: 3.1 (Force Build + Cron)", 200
 
 if __name__ == '__main__':
     # init_db() # Disabled for Supabase REST Migration
@@ -1607,4 +1607,3 @@ if __name__ == '__main__':
              bot.infinity_polling(timeout=10, long_polling_timeout=5)
          except Exception as e:
              print(f"Bot polling error: {e}")
-
