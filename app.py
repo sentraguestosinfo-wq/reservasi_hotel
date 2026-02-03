@@ -8,6 +8,7 @@ import os
 import data  # Import data.py
 import urllib.parse
 import time
+import calendar
 from fpdf import FPDF
 import math
 import smtplib
@@ -97,9 +98,12 @@ def sw():
 
 @app.route('/qris_image')
 def qris_image():
-    # Sajikan file qris.jpeg dari root directory
-    if os.path.exists('qris.jpeg'):
-        return send_file('qris.jpeg', mimetype='image/jpeg')
+    # Sajikan file qris.jpeg dari root directory (Safe for Vercel)
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    qris_path = os.path.join(base_dir, 'qris.jpeg')
+    
+    if os.path.exists(qris_path):
+        return send_file(qris_path, mimetype='image/jpeg')
     else:
         return "QRIS image not found", 404
 
@@ -231,7 +235,7 @@ def send_qris_email(to_email, booking_data):
 
         # Link QRIS (Direct Image or Page)
         # Using qris_image endpoint
-        qris_link = f"{NGROK_URL}/qris_image"
+        qris_link = f"{APP_URL}/qris_image"
         
         body = f"""
         <html>
@@ -1004,14 +1008,17 @@ def handle_qris(call):
             guest_name = None
 
         # Cek file QRIS
-        if not os.path.exists('qris.jpeg'):
+        base_dir = os.path.dirname(os.path.abspath(__file__))
+        qris_path = os.path.join(base_dir, 'qris.jpeg')
+        
+        if not os.path.exists(qris_path):
             bot.answer_callback_query(call.id, "File QRIS hilang! ❌")
             bot.send_message(call.message.chat.id, "❌ File 'qris.jpeg' tidak ditemukan di server.")
             return
 
         # Kirim ke Tamu
         try:
-            with open('qris.jpeg', 'rb') as photo:
+            with open(qris_path, 'rb') as photo:
                 salutation = f"👋 Halo {format_guest_name(guest_name)}," if guest_name else "👋 Halo,"
                 caption = (f"{salutation}\n\nTerima kasih telah melakukan reservasi di Mercure Bandung Nexa Supratman.\n"
                            f"🆔 No. Resi: *{resi}*\n\n"
