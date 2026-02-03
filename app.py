@@ -1242,85 +1242,94 @@ def calculate_distance(lat1, lon1, lat2, lon2):
     d = R * c
     return d
 
+def process_expired_bookings_logic():
+    print("Running Expired Booking Check...")
+    try:
+        # 1. Cari booking 'pending' yang sudah > 2 jam
+        time_threshold = (datetime.now() - timedelta(hours=2)).isoformat()
+        
+        response = supabase.table('bookings').select('resi, nama, chat_id, lat, lng, created_at, extended').eq('status', 'pending').lt('created_at', time_threshold).execute()
+        rows = response.data
+        
+        for row in rows:
+            resi = row['resi']
+            nama = row['nama']
+            chat_id = row['chat_id']
+            lat = row['lat']
+            lng = row['lng']
+            created_at_str = row['created_at']
+            extended = row['extended']
+    
+            # Parse created_at
+            try:
+                if '.' in created_at_str:
+                    created_at = datetime.strptime(created_at_str.split('.')[0], "%Y-%m-%dT%H:%M:%S")
+                else:
+                    created_at = datetime.fromisoformat(created_at_str)
+            except:
+                created_at = datetime.now() # Fallback
+
+            # Cek Geolocation untuk Extend (Jika belum pernah extended)
+            should_extend = False
+            
+            # Titik Koordinat Hotel Mercure Bandung Nexa Supratman (Hardcoded/From data.py)
+            HOTEL_LAT = -6.9088
+            HOTEL_LNG = 107.6285
+            
+            if not extended and lat and lng:
+                # Cek jarak
+                dist = calculate_distance(lat, lng, HOTEL_LAT, HOTEL_LNG)
+                print(f"DEBUG: Booking {resi} expired. Dist: {dist:.2f} km")
+                
+                if dist < 10: # Radius aman 10 km
+                    should_extend = True
+            
+            if should_extend:
+                # EXTEND 30 Menit (Update created_at + 30 menit)
+                new_created_at = created_at + timedelta(minutes=30)
+                supabase.table('bookings').update({'created_at': new_created_at.isoformat(), 'extended': 1}).eq('resi', resi).execute()
+                
+                msg_ext = f"⏳ Booking {resi} ({nama}) diperpanjang 30 menit otomatis karena posisi tamu dekat ({dist:.1f} km)."
+                print(msg_ext)
+                
+                # Notif FO
+                for sid in STAFF_FO_IDS:
+                    try:
+                        bot.send_message(sid, msg_ext)
+                    except: pass
+                    
+            else:
+                # CANCEL
+                supabase.table('bookings').update({'status': 'cancelled'}).eq('resi', resi).execute()
+                
+                print(f"Booking {resi} ({nama}) dicancel otomatis (Expired > 2 jam).")
+                
+                # Notif Tamu
+                if chat_id != 'unknown':
+                    try:
+                        bot.send_message(chat_id, f"⚠️ *BOOKING EXPIRED*\nBooking Anda {resi} telah dibatalkan otomatis karena melewati batas waktu hold 2 jam.", parse_mode='Markdown')
+                    except: pass
+                    
+                # Notif FO
+                for sid in STAFF_FO_IDS:
+                    try:
+                        bot.send_message(sid, f"❌ Booking {resi} ({nama}) otomatis DIBATALKAN (Expired 2 Jam).")
+                    except: pass
+        
+    except Exception as e:
+        print(f"Error process_expired_bookings_logic: {e}")
+
 def check_expired_bookings():
     print("Background Task Started: Auto-Cancel & Geolocation Check")
     while True:
-        try:
-            # 1. Cari booking 'pending' yang sudah > 2 jam
-            time_threshold = (datetime.now() - timedelta(hours=2)).isoformat()
-            
-            response = supabase.table('bookings').select('resi, nama, chat_id, lat, lng, created_at, extended').eq('status', 'pending').lt('created_at', time_threshold).execute()
-            rows = response.data
-            
-            for row in rows:
-                resi = row['resi']
-                nama = row['nama']
-                chat_id = row['chat_id']
-                lat = row['lat']
-                lng = row['lng']
-                created_at_str = row['created_at']
-                extended = row['extended']
-        
-                # Parse created_at
-                try:
-                    if '.' in created_at_str:
-                        created_at = datetime.strptime(created_at_str.split('.')[0], "%Y-%m-%dT%H:%M:%S")
-                    else:
-                        created_at = datetime.fromisoformat(created_at_str)
-                except:
-                    created_at = datetime.now() # Fallback
-
-                # Cek Geolocation untuk Extend (Jika belum pernah extended)
-                should_extend = False
-                
-                # Titik Koordinat Hotel Mercure Bandung Nexa Supratman (Hardcoded/From data.py)
-                HOTEL_LAT = -6.9088
-                HOTEL_LNG = 107.6285
-                
-                if not extended and lat and lng:
-                    # Cek jarak
-                    dist = calculate_distance(lat, lng, HOTEL_LAT, HOTEL_LNG)
-                    print(f"DEBUG: Booking {resi} expired. Dist: {dist:.2f} km")
-                    
-                    if dist < 10: # Radius aman 10 km
-                        should_extend = True
-                
-                if should_extend:
-                    # EXTEND 30 Menit (Update created_at + 30 menit)
-                    new_created_at = created_at + timedelta(minutes=30)
-                    supabase.table('bookings').update({'created_at': new_created_at.isoformat(), 'extended': 1}).eq('resi', resi).execute()
-                    
-                    msg_ext = f"⏳ Booking {resi} ({nama}) diperpanjang 30 menit otomatis karena posisi tamu dekat ({dist:.1f} km)."
-                    print(msg_ext)
-                    
-                    # Notif FO
-                    for sid in STAFF_FO_IDS:
-                        try:
-                            bot.send_message(sid, msg_ext)
-                        except: pass
-                        
-                else:
-                    # CANCEL
-                    supabase.table('bookings').update({'status': 'cancelled'}).eq('resi', resi).execute()
-                    
-                    print(f"Booking {resi} ({nama}) dicancel otomatis (Expired > 2 jam).")
-                    
-                    # Notif Tamu
-                    if chat_id != 'unknown':
-                        try:
-                            bot.send_message(chat_id, f"⚠️ *BOOKING EXPIRED*\nBooking Anda {resi} telah dibatalkan otomatis karena melewati batas waktu hold 2 jam.", parse_mode='Markdown')
-                        except: pass
-                        
-                    # Notif FO
-                    for sid in STAFF_FO_IDS:
-                        try:
-                            bot.send_message(sid, f"❌ Booking {resi} ({nama}) otomatis DIBATALKAN (Expired 2 Jam).")
-                        except: pass
-            
-        except Exception as e:
-            print(f"Error background task: {e}")
-            
+        process_expired_bookings_logic()
         time.sleep(60) # Cek tiap 1 menit
+
+@app.route('/api/cron/check_expired')
+def cron_check_expired():
+    # Endpoint untuk Cron Job Vercel (dijalankan tiap 10 menit)
+    process_expired_bookings_logic()
+    return "Checked", 200
 
 # --- STAFF DASHBOARD ROUTES ---
 
